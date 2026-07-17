@@ -1,0 +1,24 @@
+# Reference fragment for an applicable config.toml.
+# This is not a standalone custom-agent TOML file.
+# Replace names and paths, then verify the current official Hooks schema.
+
+[features]
+hooks = true
+
+[[hooks.SubagentStart]]
+matcher = "^data_analyzer$"
+
+[[hooks.SubagentStart.hooks]]
+type = "command"
+command = '/usr/bin/python3 "$(git rev-parse --show-toplevel)/.codex/hooks/data_analyzer_start.py"'
+timeout = 30
+statusMessage = "Preparing data analyzer context"
+
+[[hooks.SubagentStop]]
+matcher = "^data_analyzer$"
+
+[[hooks.SubagentStop.hooks]]
+type = "command"
+command = '/usr/bin/python3 "$(git rev-parse --show-toplevel)/.codex/hooks/data_analyzer_stop.py"'
+timeout = 30
+statusMessage = "Validating data analyzer result"
