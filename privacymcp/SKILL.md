@@ -267,7 +267,7 @@ For totals and trends:
 
 1. Define the inactivity window.
 2. List the relevant cards.
-3. retrieve all transaction pages covering that window.
+3. Retrieve all transaction pages covering that window.
 4. Identify cards with no matching activity.
 5. Present the candidate list with masked details.
 6. Do not close anything until the bulk-close workflow is confirmed.
