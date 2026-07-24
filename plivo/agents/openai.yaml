@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plivo"
+  short_description: "Send messages and place calls with Plivo"
+  default_prompt: "Use $plivo to send an SMS from my saved Plivo number."
