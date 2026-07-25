@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plivo WhatsApp"
+  short_description: "Configure and use Plivo WhatsApp safely"
+  default_prompt: "Use $plivo-whatsapp to configure Plivo or send and verify a WhatsApp message."
