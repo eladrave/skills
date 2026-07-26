@@ -1,0 +1,12 @@
+interface:
+  display_name: Creating Composio MCP Servers
+  short_description: Create Composio MCP servers for selected toolkits
+  default_prompt: Create a Composio MCP server for my selected toolkit(s), connect
+    the requested user, and return a verified MCP endpoint.
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
