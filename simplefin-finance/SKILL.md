@@ -1,9 +1,9 @@
 ---
-name: simplefin
+name: simplefin-finance
 description: Retrieve and analyze the user's own read-only SimpleFIN account balances and transactions. Use when the user asks to connect SimpleFIN, list connected accounts, inspect balances, retrieve date-bounded or pending transactions, analyze spending or cash flow, or create a recurring financial briefing from SimpleFIN data.
 ---
 
-# SimpleFIN
+# SimpleFIN Finance
 
 Use the bundled `scripts/simplefin.py` client to claim a one-time Setup Token and
 read account data through SimpleFIN Bridge. The client uses only Python's
@@ -28,9 +28,13 @@ account, or modify a transaction.
 
 ## Security rules
 
-- Treat both the Setup Token and Access URL as credentials.
-- Ask for the one-time Setup Token only when configuration is absent and only
-  in an interactive conversation.
+- Treat the Access URL as a long-lived credential. Treat an unclaimed Setup
+  Token as sensitive because anyone who claims it first receives the Access
+  URL, even though the token becomes unusable immediately after a successful
+  claim.
+- Ask the user to paste the one-time Setup Token into the current chat only
+  when configuration is absent, persistence preflight has succeeded, and the
+  conversation is interactive. Claim it immediately after receipt.
 - Never put a Setup Token or Access URL in a command argument, source file, log
   message, answer, or scheduled-task prompt. A harness-managed secret may
   inject the Access URL through `SIMPLEFIN_ACCESS_URL`; the agent must never set
@@ -89,6 +93,16 @@ Use this order before every SimpleFIN data request:
 8. If multiple matching files remain ambiguous, stop and ask the user which
    Library item is authoritative. Do not inspect their contents.
 
+If `status` or a resolved external state file shows that an Access URL is
+already configured, continue the user's original request immediately. Do not
+tell the user to send another prompt, repeat the request, invoke the skill
+again, or describe what they should write back in chat.
+
+If configuration is absent, perform persistence preflight immediately. Once a
+destination passes, ask for the Setup Token directly and include the creation
+link and concise instructions. Do not merely tell the user to ask for setup in
+a later message.
+
 When using an external backend, preserve the same stored object identity during
 replacement. Remove temporary materializations at the end of the run if the
 harness does not clean them automatically.
@@ -133,7 +147,9 @@ If no state is configured and persistence preflight succeeded:
    file path. Do not continue if persistence is merely assumed.
 2. In an interactive conversation, explain that SimpleFIN needs a one-time
    Setup Token. Ask the user to create one at
-   `https://bridge.simplefin.org/simplefin/create` and paste it in the chat.
+   `https://bridge.simplefin.org/simplefin/create`, copy the complete token,
+   and paste it into the current chat. Explain that the token is invalidated
+   immediately after a successful claim and must not be reused.
 3. After the user supplies it, immediately start setup in a PTY. For a
    persistent filesystem, use the verified destination. For an external
    backend, use a preflighted private temporary destination:
@@ -152,7 +168,8 @@ If no state is configured and persistence preflight succeeded:
    reading it. For Library, store it as `/SimpleFin/simplefin-access-url.txt`.
    Preserve the backend object identity for future replacement.
 7. Set the local file to mode `0600`, run `accounts` with
-   `--access-url-file`, and continue the user's original request.
+   `--access-url-file`, and continue the user's original request without asking
+   them to repeat it or send another prompt.
 8. Remove the temporary local copy when the run finishes if the runtime does
    not clean it automatically.
 

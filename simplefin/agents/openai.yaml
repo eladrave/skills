@@ -1,6 +1,0 @@
-interface:
-  display_name: "SimpleFIN"
-  short_description: "Read SimpleFIN balances and transactions"
-  default_prompt: "Use $simplefin to analyze my account balances and transactions."
-policy:
-  allow_implicit_invocation: true
