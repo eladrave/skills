@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import io
 import json
 import os
 import stat
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 from unittest import mock
@@ -104,6 +106,49 @@ class SimpleFINClientTests(unittest.TestCase):
             self.assertEqual(path.read_text().strip(), access_url)
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 
+    def test_storage_preflight_is_non_destructive_and_private(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".simplefin" / "access-url"
+            result = simplefin.preflight_secret_destination(path, replace=False)
+            self.assertTrue(result["storage_ready"])
+            self.assertFalse(path.exists())
+            self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
+            self.assertEqual(list(path.parent.iterdir()), [])
+
+    def test_storage_preflight_rejects_world_readable_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "access-url"
+            path.write_text("not-a-real-credential\n")
+            path.chmod(0o644)
+            with self.assertRaisesRegex(simplefin.SimpleFINError, "too broad"):
+                simplefin.preflight_secret_destination(path, replace=True)
+
+    def test_status_does_not_return_credential(self):
+        credential = "https://user:pass@bridge.simplefin.org/simplefin"
+        with mock.patch.dict(
+            os.environ,
+            {
+                "SIMPLEFIN_ALLOWED_HOST_SUFFIXES": ".simplefin.org",
+                "SIMPLEFIN_ACCESS_URL": credential,
+            },
+            clear=True,
+        ):
+            result = simplefin.credential_status()
+        self.assertEqual(result["source"], "runtime-injected-secret")
+        self.assertNotIn(credential, json.dumps(result))
+
+    def test_setup_refuses_to_prompt_without_storage_confirmation(self):
+        args = mock.Mock(
+            storage_preflight_confirmed=False,
+            timeout=30.0,
+            secret_file="unused",
+            replace=False,
+        )
+        with mock.patch.object(simplefin.getpass, "getpass") as prompt:
+            with self.assertRaisesRegex(simplefin.SimpleFINError, "Refusing to consume"):
+                simplefin._command_setup(args)
+        prompt.assert_not_called()
+
     def test_load_rejects_world_readable_secret(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "access-url"
@@ -130,9 +175,10 @@ class SimpleFINClientTests(unittest.TestCase):
                 "fetch_accounts",
                 return_value={"accounts": [], "connections": [], "errors": []},
             ) as fetch:
-                exit_code = simplefin.main(
-                    ["--access-url-file", str(path), "accounts"]
-                )
+                with redirect_stdout(io.StringIO()):
+                    exit_code = simplefin.main(
+                        ["--access-url-file", str(path), "accounts"]
+                    )
             self.assertEqual(exit_code, 0)
             self.assertEqual(os.environ["SIMPLEFIN_ACCESS_URL_FILE"], str(path))
             fetch.assert_called_once_with(balances_only=True, timeout=30.0)
