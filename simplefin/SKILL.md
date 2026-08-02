@@ -17,9 +17,11 @@ coverage semantics matter to the task.
 
 - Python 3.11 or newer.
 - Outbound HTTPS access to the SimpleFIN server.
-- ChatGPT Library access for persistent credential state in ChatGPT web and
-  scheduled tasks.
-- A writable temporary directory for materializing the credential file.
+- At least one credential source or persistent storage backend: a
+  runtime-injected secret, a harness-guaranteed persistent filesystem,
+  ChatGPT Library, or another authenticated secret/file backend.
+- A writable private temporary directory when an external backend must
+  materialize the credential for the Python client.
 
 SimpleFIN is read-only. Never claim that this skill can move money, edit an
 account, or modify a transaction.
@@ -29,8 +31,10 @@ account, or modify a transaction.
 - Treat both the Setup Token and Access URL as credentials.
 - Ask for the one-time Setup Token only when configuration is absent and only
   in an interactive conversation.
-- Never put a Setup Token or Access URL in a command argument, environment
-  variable, source file, log message, answer, or scheduled-task prompt.
+- Never put a Setup Token or Access URL in a command argument, source file, log
+  message, answer, or scheduled-task prompt. A harness-managed secret may
+  inject the Access URL through `SIMPLEFIN_ACCESS_URL`; the agent must never set
+  or echo that variable itself.
 - Pass a Setup Token only through the private standard-input prompt of `setup`.
 - Never call Library `read` or content search on the credential state file.
   Resolve it by exact title, then materialize it directly for the script.
@@ -51,59 +55,113 @@ python3 <skill-directory>/scripts/simplefin.py ...
 
 Do not copy or modify the client in the user's project.
 
-## Resolve persistent state
+## Check configuration
 
 Use this order before every SimpleFIN data request:
 
-1. If `SIMPLEFIN_ACCESS_URL` or `SIMPLEFIN_ACCESS_URL_FILE` is already supplied
-   by the runtime, use it without exposing its value.
-2. Otherwise, check for `.simplefin/access-url` in the current directory or a
-   parent directory. The client does this automatically.
-3. Otherwise, use ChatGPT Library title-only search for the exact filename
-   `simplefin-access-url.txt`. Prefer the item at `/SimpleFin/`.
-4. If exactly one state file is found, materialize/download it directly into a
-   private temporary directory. Do not call Library `read`. Set its local mode
-   to `0600` if materialization did not preserve restrictive permissions.
-5. Pass the materialized path explicitly before the command:
+1. Run `status`. It checks runtime-injected state and persistent local files
+   without calling SimpleFIN or exposing credentials:
+
+   ```bash
+   python3 <skill-directory>/scripts/simplefin.py status
+   ```
+
+2. If `SIMPLEFIN_ACCESS_URL` or `SIMPLEFIN_ACCESS_URL_FILE` is supplied by the
+   runtime, use it without exposing its value.
+3. Otherwise, the client checks for `.simplefin/access-url` in the current
+   directory or a parent directory.
+4. Otherwise, discover whether ChatGPT Library or another authenticated
+   credential/file backend is available. Do not assume Library exists merely
+   because this skill is running in ChatGPT.
+5. For ChatGPT Library, use title-only search for the exact filename
+   `simplefin-access-url.txt` and prefer `/SimpleFin/`. For another backend, use
+   its exact secret identifier. Never perform a content search.
+6. If exactly one state file is found, materialize it directly into a private
+   temporary directory. Do not call a content-reading tool. Set its local mode
+   to `0600` if needed.
+7. Pass the materialized path explicitly before the command:
 
    ```bash
    python3 <skill-directory>/scripts/simplefin.py \
      --access-url-file <materialized-private-path> accounts
    ```
 
-6. If multiple matching files remain ambiguous, stop and ask the user which
+8. If multiple matching files remain ambiguous, stop and ask the user which
    Library item is authoritative. Do not inspect their contents.
 
-Use the current ChatGPT Library connector's supported search, materialization,
-create, replace, and folder-management tools. Preserve the same Library file
-identity when replacing an existing credential.
+When using an external backend, preserve the same stored object identity during
+replacement. Remove temporary materializations at the end of the run if the
+harness does not clean them automatically.
+
+## Persistence preflight
+
+Before asking for or accepting a Setup Token, select and verify one persistence
+destination. This step is mandatory because claiming a Setup Token consumes it.
+
+Supported destinations, in priority order:
+
+1. **Writable runtime secret backend:** Confirm that authenticated create or
+   replace operations are callable. Perform the backend's harmless capability
+   check. If none exists, create and delete a non-sensitive probe object.
+2. **Harness-guaranteed persistent filesystem:** The harness must explicitly
+   guarantee that the directory survives future conversations or scheduled
+   runs. Filesystem writability alone does not establish persistence. Then run:
+
+   ```bash
+   python3 <skill-directory>/scripts/simplefin.py preflight-storage \
+     --secret-file <persistent-private-path>
+   ```
+
+3. **ChatGPT Library:** Confirm that title-only search, materialization, create
+   or replace, and folder operations are callable. Before requesting the Setup
+   Token, verify write permission with a non-sensitive probe file in
+   `/SimpleFin/`, then remove the probe. Do not read credential content.
+4. **Another authenticated file backend:** Verify both write and later
+   materialization with non-sensitive probe data before setup.
+
+If no destination passes preflight, stop before asking for or claiming a Setup
+Token. Explain that this harness needs a persistent filesystem, runtime secret
+injection, ChatGPT Library, or another authenticated credential backend. Never
+offer session-only setup by default because the token would be consumed without
+durable storage.
 
 ## First-run setup
 
-If no state is configured:
+If no state is configured and persistence preflight succeeded:
 
-1. In an interactive conversation, explain that SimpleFIN needs a one-time
+1. Record which destination passed preflight and the final credential object or
+   file path. Do not continue if persistence is merely assumed.
+2. In an interactive conversation, explain that SimpleFIN needs a one-time
    Setup Token. Ask the user to create one at
    `https://bridge.simplefin.org/simplefin/create` and paste it in the chat.
-2. After the user supplies it, immediately start setup in a PTY with a private
-   temporary destination:
+3. After the user supplies it, immediately start setup in a PTY. For a
+   persistent filesystem, use the verified destination. For an external
+   backend, use a preflighted private temporary destination:
 
    ```bash
    python3 <skill-directory>/scripts/simplefin.py setup \
-     --secret-file <private-temp-directory>/simplefin-access-url.txt
+     --secret-file <preflighted-path>/simplefin-access-url.txt \
+     --storage-preflight-confirmed
    ```
 
-3. Wait for `SimpleFIN Setup Token:`, then send the token through the process's
+4. Wait for `SimpleFIN Setup Token:`, then send the token through the process's
    standard input. Never interpolate it into the shell command.
-4. Confirm that the command returned `configured: true`. The Setup Token is now
+5. Confirm that the command returned `configured: true`. The Setup Token is now
    consumed and cannot be reused.
-5. Without reading the file, create `/SimpleFin/` in ChatGPT Library if needed
-   and upload `simplefin-access-url.txt` there as the persistent credential
-   state file. Preserve the returned Library identity for future replacement.
-6. Set the local file to mode `0600`, run `accounts` with
+6. For an external backend, upload or replace the credential file without
+   reading it. For Library, store it as `/SimpleFin/simplefin-access-url.txt`.
+   Preserve the backend object identity for future replacement.
+7. Set the local file to mode `0600`, run `accounts` with
    `--access-url-file`, and continue the user's original request.
-7. Remove the temporary local copy when the run finishes if the runtime does
+8. Remove the temporary local copy when the run finishes if the runtime does
    not clean it automatically.
+
+If external persistence unexpectedly fails after the token was claimed, keep
+the credential only in the current private temporary file while attempting a
+previously preflighted alternative backend. Never print it or ask for the same
+Setup Token again. If no durable store succeeds, tell the user the connection
+was claimed but could not be persisted and instruct them to revoke it in
+SimpleFIN before reconnecting from a suitable harness.
 
 If the state file already exists, never request another Setup Token merely to
 retry a network, rate-limit, permission, or API error. If SimpleFIN returns 403
@@ -114,10 +172,9 @@ In an unattended scheduled run, never ask for or claim a Setup Token. If no
 persistent state can be resolved, report that interactive setup is required and
 include the Setup Token creation link.
 
-ChatGPT Library is persistent private file storage, not a dedicated secrets
-manager. If the user's workspace policy prohibits storing financial credentials
-there, stop and require a runtime-provided secret or an authenticated MCP/app
-backend instead.
+ChatGPT Library is private file storage, not a dedicated secrets manager. If
+workspace policy prohibits financial credentials there, use a runtime-managed
+secret or authenticated credential backend instead.
 
 ## Commands
 
@@ -185,4 +242,6 @@ For each scheduled run:
    network access, or an account is unavailable.
 5. Report the range, account scope, balance timestamps, pending inclusion,
    returned errors, and important coverage limitations.
-6. Never perform interactive setup during the scheduled run.
+6. Never perform interactive setup or storage probing during the scheduled
+   run. If no configured state is available, report that an interactive setup
+   in a persistence-capable harness is required.
