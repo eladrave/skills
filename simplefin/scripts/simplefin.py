@@ -288,18 +288,93 @@ def load_access_url() -> str:
     return access_url
 
 
-def _write_secret_file(path: Path, access_url: str, *, replace: bool) -> None:
-    destination = path.expanduser().resolve()
+def credential_status() -> dict[str, Any]:
+    """Return credential availability without returning credential contents."""
+    from_environment = os.getenv("SIMPLEFIN_ACCESS_URL")
+    if from_environment:
+        parse_access_url(from_environment)
+        return {"configured": True, "source": "runtime-injected-secret"}
+
+    secret_file = _find_secret_file()
+    if secret_file is None:
+        return {"configured": False, "source": None}
+
+    load_access_url()
+    return {
+        "configured": True,
+        "source": "credential-file",
+        "secret_file": str(secret_file),
+    }
+
+
+def _prepare_secret_destination(path: Path, *, replace: bool) -> Path:
+    raw_destination = path.expanduser()
+    if raw_destination.is_symlink():
+        raise SimpleFINError("Secret destination must not be a symbolic link.")
+    destination = raw_destination.resolve()
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         os.chmod(destination.parent, 0o700)
-    except OSError:
-        pass
-    if destination.exists() and not replace:
-        raise SimpleFINError(
-            f"Secret file already exists at {destination}. Use --replace only when "
-            "you intentionally generated a new SimpleFIN connection."
-        )
+    except OSError as exc:
+        raise SimpleFINError("Could not secure the SimpleFIN secret directory.") from exc
+
+    if destination.exists():
+        if not destination.is_file():
+            raise SimpleFINError("Secret destination exists but is not a regular file.")
+        try:
+            mode = stat.S_IMODE(destination.stat().st_mode)
+        except OSError as exc:
+            raise SimpleFINError("Could not inspect the existing secret destination.") from exc
+        if mode & 0o077:
+            raise SimpleFINError(
+                f"Existing secret destination permissions are too broad ({mode:04o})."
+            )
+        if not replace:
+            raise SimpleFINError(
+                f"Secret file already exists at {destination}. Use the configured "
+                "credential or use --replace only for an intentional reconnection."
+            )
+    return destination
+
+
+def preflight_secret_destination(path: Path, *, replace: bool) -> dict[str, Any]:
+    """Verify safe local writability without creating or consuming a credential."""
+    destination = _prepare_secret_destination(path, replace=replace)
+    fd = -1
+    probe_path: Path | None = None
+    try:
+        fd, probe_name = tempfile.mkstemp(prefix=".simplefin-storage-probe-", dir=destination.parent)
+        probe_path = Path(probe_name)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            handle.write("storage-probe\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as exc:
+        raise SimpleFINError("Secret destination is not safely writable.") from exc
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        if probe_path is not None:
+            try:
+                probe_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    return {
+        "storage_ready": True,
+        "secret_file": str(destination),
+        "permissions": "0600",
+        "note": (
+            "Local writability is verified. The harness must separately guarantee "
+            "that this location or its external backend persists across runs."
+        ),
+    }
+
+
+def _write_secret_file(path: Path, access_url: str, *, replace: bool) -> None:
+    destination = _prepare_secret_destination(path, replace=replace)
 
     fd, temporary_name = tempfile.mkstemp(prefix=".access-url-", dir=destination.parent)
     temporary_path = Path(temporary_name)
@@ -533,10 +608,24 @@ def _default_secret_path() -> Path:
     return Path.cwd() / DEFAULT_SECRET_RELATIVE_PATH
 
 
+def _command_status(args: argparse.Namespace) -> dict[str, Any]:
+    return credential_status()
+
+
+def _command_preflight_storage(args: argparse.Namespace) -> dict[str, Any]:
+    return preflight_secret_destination(Path(args.secret_file), replace=args.replace)
+
+
 def _command_setup(args: argparse.Namespace) -> dict[str, Any]:
+    if not args.storage_preflight_confirmed:
+        raise SimpleFINError(
+            "Refusing to consume a one-time Setup Token before persistent storage "
+            "has been confirmed. Run preflight-storage and confirm the harness "
+            "persists the selected destination or external credential backend."
+        )
     setup_token = getpass.getpass("SimpleFIN Setup Token: ")
     access_url = claim_setup_token(setup_token, timeout=args.timeout)
-    destination = Path(args.secret_file) if args.secret_file else _default_secret_path()
+    destination = Path(args.secret_file)
     _write_secret_file(destination, access_url, replace=args.replace)
     return {
         "configured": True,
@@ -596,13 +685,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Check whether a credential is configured without calling SimpleFIN.",
+    )
+    status_parser.set_defaults(handler=_command_status)
+
+    preflight_parser = subparsers.add_parser(
+        "preflight-storage",
+        help="Verify a secret destination is safely writable without consuming a token.",
+    )
+    preflight_parser.add_argument(
+        "--secret-file",
+        required=True,
+        help="Planned credential destination.",
+    )
+    preflight_parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Allow an existing restricted credential file during intentional reconnection.",
+    )
+    preflight_parser.set_defaults(handler=_command_preflight_storage)
+
     setup_parser = subparsers.add_parser(
         "setup",
         help="Privately claim a one-time Setup Token and save the Access URL.",
     )
     setup_parser.add_argument(
         "--secret-file",
-        help="Secret destination (default: .simplefin/access-url in the current directory).",
+        required=True,
+        help="Preflighted secret destination.",
+    )
+    setup_parser.add_argument(
+        "--storage-preflight-confirmed",
+        action="store_true",
+        help="Confirm a persistent destination or external credential backend was verified.",
     )
     setup_parser.add_argument(
         "--replace",
