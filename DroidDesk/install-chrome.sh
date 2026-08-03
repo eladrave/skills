@@ -66,6 +66,76 @@ standalone_prefix() {
   fi
 }
 
+install_standalone_menu_bridge() {
+  local prefix=$1 launcher rootfs desktop_dir wrapper_dir wrapper desktop icon_value
+  local wrapper_tmp desktop_tmp
+  prefix=${prefix%/}
+  launcher="$prefix/bin/start-debian"
+  rootfs="$prefix/var/lib/proot-distro/installed-rootfs/debian"
+  desktop_dir="$HOME/.local/share/applications/droiddesk-debian"
+  wrapper_dir="$HOME/.local/share/droiddesk-debian-wrappers"
+  wrapper="$wrapper_dir/google-chrome.sh"
+  desktop="$desktop_dir/droiddesk-debian-google-chrome.desktop"
+  mkdir -p "$desktop_dir" "$wrapper_dir"
+
+  wrapper_tmp=$(mktemp); TEMP_PATHS+=("$wrapper_tmp")
+  {
+    printf '#!%s\n' "$prefix/bin/bash"
+    printf '%s\n' 'set -uo pipefail'
+    printf 'START_DEBIAN=%q\n' "$launcher"
+    printf 'DEFAULT_LOG_DIR=%q\n' "${prefix%/usr}/tmp"
+    cat <<'WRAPPER'
+APP_COMMAND=/usr/local/bin/google-chrome-droiddesk
+APP_ID=google-chrome
+LOG_DIR="${TMPDIR:-$DEFAULT_LOG_DIR}"
+[[ -d "$LOG_DIR" ]] || LOG_DIR="$DEFAULT_LOG_DIR"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/droiddesk-$APP_ID.log"
+{
+  printf 'exec %s' "$APP_COMMAND"
+  for argument in "$@"; do
+    printf ' %q' "$argument"
+  done
+  printf '\n'
+} | "$START_DEBIAN" >> "$LOG_FILE" 2>&1
+status=$?
+if (( status != 0 )) && command -v notify-send >/dev/null 2>&1; then
+  notify-send "Google Chrome failed" "See $LOG_FILE"
+fi
+exit "$status"
+WRAPPER
+  } > "$wrapper_tmp"
+  install -m 0755 "$wrapper_tmp" "$wrapper"
+
+  icon_value="application-x-executable"
+  for desktop_tmp in \
+    "$rootfs/opt/google/chrome/product_logo_128.png" \
+    "$rootfs/usr/share/icons/hicolor/128x128/apps/google-chrome.png" \
+    "$rootfs/usr/share/pixmaps/google-chrome.png"; do
+    if [[ -f "$desktop_tmp" ]]; then
+      icon_value="$desktop_tmp"
+      break
+    fi
+  done
+  desktop_tmp=$(mktemp); TEMP_PATHS+=("$desktop_tmp")
+  {
+    printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Version=1.0'
+    printf '%s\n' 'Name=Google Chrome (Debian)'
+    printf '%s\n' 'Comment=Google Chrome running inside DroidDesk Debian PRoot'
+    printf 'Exec=%s %%U\n' "$wrapper"
+    printf 'TryExec=%s\n' "$wrapper"
+    printf 'Icon=%s\n' "$icon_value"
+    printf '%s\n' 'Terminal=false' 'Categories=Network;WebBrowser;' 'StartupNotify=true' 'NoDisplay=false' 'X-DroidDesk-PRoot=true'
+  } > "$desktop_tmp"
+  install -m 0644 "$desktop_tmp" "$desktop"
+
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+  if command -v pgrep >/dev/null 2>&1 && pgrep -x xfce4-panel >/dev/null 2>&1; then
+    xfce4-panel --restart >/dev/null 2>&1 &
+  fi
+  ok "Added Google Chrome (Debian) to the DroidDesk UI menu."
+}
+
 run_from_standalone() {
   local prefix launcher
   prefix=$(standalone_prefix)
@@ -80,8 +150,9 @@ run_from_standalone() {
     curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 "$SELF_URL"; } | "$launcher"; then
     die "$APP_NAME installation inside the standalone DroidDesk Debian PRoot failed."
   fi
+  install_standalone_menu_bridge "$prefix"
   ok "$APP_NAME installation completed inside Debian."
-  info "Open DroidDesk's Debian terminal and run: google-chrome-droiddesk"
+  info "Launch Google Chrome (Debian) from the DroidDesk UI menu, or run google-chrome-droiddesk from the Debian shell."
   exit 0
 }
 
