@@ -299,7 +299,9 @@ main() {
     fi
   fi
   if [[ "${DROIDDESK_INSTALL_FROM_HOST:-0}" != "1" ]]; then
-    info "From the Termux host, synchronize the launcher with: bash ~/proot-menu-sync.sh"
+    info "Menu integration must run from the host environment."
+    info "Standalone DroidDesk: exit Debian and run add-warp-shortcut.sh from the XFCE terminal."
+    info "Older Termux setup: run bash ~/proot-menu-sync.sh from the Termux host."
   fi
 }
 
