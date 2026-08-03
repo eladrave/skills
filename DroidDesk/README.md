@@ -100,7 +100,7 @@ This verifies the existing Debian Chrome installation, recreates the `--no-sandb
 curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/install-codex.sh | bash
 ```
 
-Authenticate after installation:
+On the standalone DroidDesk APK, authenticate from DroidDesk's **Debian shell**:
 
 ```bash
 codex login --device-auth
@@ -125,6 +125,8 @@ curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/add-
 ```
 
 Run that command from the terminal inside DroidDesk's XFCE desktop, not from the Debian shell. It verifies the existing Debian installation and creates the native interactive bridge without downloading or reinstalling Codex.
+
+Authentication is the exception: complete `codex login --device-auth` from DroidDesk's Debian shell. After it succeeds there, return to the XFCE terminal and run `codex login status`. The bridge uses the same Debian user and Codex home, so the cached credentials should be reused.
 
 If the installer previously determined that the normal Codex sandbox cannot run under PRoot, the updater also exposes the explicit `codex-proot` fallback. It never silently redirects `codex` to the unsandboxed fallback.
 
@@ -212,7 +214,7 @@ Applications launched from these entries run inside Debian PRoot. Their logs are
 
 ### Codex is not found in the XFCE terminal
 
-Codex is installed inside Debian, while the XFCE terminal runs in DroidDesk's native environment. Run `add-codex-command.sh` from the XFCE terminal to create an interactive command bridge. Afterward, `codex --version` and `codex login --device-auth` should work directly from that terminal.
+Codex is installed inside Debian, while the XFCE terminal runs in DroidDesk's native environment. Run `add-codex-command.sh` from the XFCE terminal to create an interactive command bridge. Authenticate from DroidDesk's Debian shell, then use `codex --version`, `codex login status`, and normal Codex commands directly from the XFCE terminal.
 
 ### Review the diagnostic log
 
