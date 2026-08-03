@@ -23,6 +23,7 @@ Official Linux packages such as Chrome and Warp require glibc and cannot run dir
 | `add-chrome-shortcut.sh` | Add shortcuts for an existing Chrome installation | Does not reinstall Chrome; creates both an XFCE application-menu entry and desktop icon |
 | `install-codex.sh` | Install OpenAI Codex CLI | Tests the Codex sandbox and creates an explicit `codex-proot` fallback when required |
 | `install-warp.sh` | Install Warp Terminal for ARM64 | Checks glibc, adds graphics environment settings, and creates a native DroidDesk menu entry |
+| `add-warp-shortcut.sh` | Add shortcuts for an existing Warp installation | Does not reinstall Warp; creates both an XFCE application-menu entry and desktop icon |
 
 ## Install a local `.deb` package
 
@@ -126,6 +127,16 @@ warp-terminal-droiddesk
 
 Warp requires glibc 2.31 or newer and either OpenGL ES 3.0 or newer, or Vulkan. Installation can succeed even when a phone's GPU stack cannot render Warp correctly.
 
+### Add shortcuts without reinstalling Warp
+
+If Warp is already installed, run this from the terminal inside DroidDesk's XFCE desktop, not from inside the Debian shell:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/add-warp-shortcut.sh | bash
+```
+
+This verifies the existing Debian Warp installation, recreates its graphics compatibility wrapper, adds **Warp Terminal (Debian)** to the XFCE application menu, creates a desktop icon, and refreshes the panel and desktop. It does not download or reinstall Warp.
+
 ## Shared behavior
 
 All installers provide:
@@ -171,7 +182,7 @@ Installation and runtime compatibility are different. A package may depend on sy
 
 ### Application is not visible in the UI menu
 
-For Chrome and Warp, rerun the specialized installer. It recreates the native bridge and restarts the XFCE panel.
+For an existing Chrome or Warp installation, run the corresponding `add-*-shortcut.sh` script from the terminal inside DroidDesk's XFCE desktop. It recreates the native bridge without reinstalling the application.
 
 The generic installer creates menu items only for package-owned `.desktop` files that contain a visible name and executable command. Command-line packages, hidden launchers, and packages without `.desktop` files are intentionally not added to the UI menu.
 
@@ -194,4 +205,5 @@ The scripts write logs to the active temporary directory. Typical paths are:
 /tmp/droiddesk-add-chrome-shortcut.log
 /tmp/droiddesk-install-codex.log
 /tmp/droiddesk-install-warp.log
+/tmp/droiddesk-add-warp-shortcut.log
 ```
