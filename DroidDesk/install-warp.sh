@@ -46,7 +46,9 @@ is_debian_environment() {
 }
 
 is_termux_host() {
-  [[ "${PREFIX:-}" == *com.termux* ]] && ! is_debian_environment
+  # Desktop terminals launched by DroidDesk do not always preserve Termux's
+  # PREFIX variable. The generated PRoot launcher is the reliable marker.
+  ! is_debian_environment && [[ -r "$HOME/start-proot.sh" ]]
 }
 
 configured_distro() {
@@ -94,7 +96,7 @@ require_root_access() {
 }
 
 require_arm64_debian() {
-  is_debian_environment || die "This installer supports DroidDesk's Debian, Ubuntu, or Kali PRoot environments."
+  is_debian_environment || die "DroidDesk was not detected. Run this from the Termux host containing ~/start-proot.sh, or from inside its Debian-family PRoot."
   local arch
   arch=$(dpkg --print-architecture)
   [[ "$arch" == "arm64" ]] || die "The Warp package requires arm64, but dpkg reports '$arch'."
