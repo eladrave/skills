@@ -18,10 +18,10 @@ Official Linux packages such as Chrome and Warp require glibc and cannot run dir
 
 | Script | Purpose | Special handling |
 |---|---|---|
-| `install-deb.sh` | Install a local ARM64 or architecture-independent `.deb` package | Validates metadata and architecture, installs dependencies, repairs partial dependency state, and verifies installation |
-| `install-chrome.sh` | Install Google Chrome stable for ARM64 | Adds the required `--no-sandbox` PRoot launcher |
+| `install-deb.sh` | Install a local ARM64 or architecture-independent `.deb` package | Validates metadata and architecture, installs dependencies, verifies installation, and bridges eligible GUI launchers into the DroidDesk menu |
+| `install-chrome.sh` | Install Google Chrome stable for ARM64 | Adds the required `--no-sandbox` PRoot launcher and a native DroidDesk menu entry |
 | `install-codex.sh` | Install OpenAI Codex CLI | Tests the Codex sandbox and creates an explicit `codex-proot` fallback when required |
-| `install-warp.sh` | Install Warp Terminal for ARM64 | Checks glibc, installs graphics dependencies, and adds DroidDesk graphics environment settings |
+| `install-warp.sh` | Install Warp Terminal for ARM64 | Checks glibc, adds graphics environment settings, and creates a native DroidDesk menu entry |
 
 ## Install a local `.deb` package
 
@@ -62,7 +62,8 @@ The generic installer performs the following checks and actions:
 8. Uses `apt-get` to install the local package and resolve repository dependencies.
 9. Repairs partial dependency state and retries once if the first installation fails.
 10. Verifies that `dpkg` reports the package as fully installed.
-11. Reports any installed desktop launchers and removes temporary package copies.
+11. Creates native DroidDesk UI menu bridges for eligible `.desktop` launchers when invoked from the standalone APK.
+12. Removes temporary package copies and menu metadata.
 
 The package itself must come from a trusted source. Debian packages can execute maintainer scripts as root during installation.
 
@@ -72,7 +73,7 @@ The package itself must come from a trusted source. Debian packages can execute 
 curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/install-chrome.sh | bash
 ```
 
-Run Chrome inside the standalone DroidDesk Debian terminal with:
+On the standalone APK, the installer adds **Google Chrome (Debian)** to the DroidDesk UI menu and refreshes the XFCE panel. You can also run Chrome from the Debian terminal with:
 
 ```bash
 google-chrome-droiddesk
@@ -106,7 +107,7 @@ The installer tests whether the Codex Linux command sandbox can initialize under
 curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/install-warp.sh | bash
 ```
 
-Run Warp inside the standalone DroidDesk Debian terminal with:
+On the standalone APK, the installer adds **Warp Terminal (Debian)** to the DroidDesk UI menu and refreshes the XFCE panel. You can also run Warp from the Debian terminal with:
 
 ```bash
 warp-terminal-droiddesk
@@ -124,7 +125,7 @@ All installers provide:
 - HTTPS downloads with redirects, retries, and empty-download detection.
 - Package identity and architecture validation before installing downloaded packages.
 - One controlled dependency-repair attempt when `apt` reports a partial installation.
-- Idempotent package reinstallation and launcher updates.
+- Idempotent package reinstallation and native menu-bridge updates.
 
 ## Troubleshooting
 
@@ -156,6 +157,21 @@ DroidDesk phones normally require an ARM64 package marked `arm64`. Packages mark
 ### Package installed but does not start
 
 Installation and runtime compatibility are different. A package may depend on systemd, Linux namespaces, kernel interfaces, hardware acceleration, or sandboxing that Android PRoot does not provide. Use a specialized installer when application-specific adjustments are needed.
+
+### Application is not visible in the UI menu
+
+For Chrome and Warp, rerun the specialized installer. It recreates the native bridge and restarts the XFCE panel.
+
+The generic installer creates menu items only for package-owned `.desktop` files that contain a visible name and executable command. Command-line packages, hidden launchers, and packages without `.desktop` files are intentionally not added to the UI menu.
+
+Standalone menu bridges are stored under:
+
+```text
+~/.local/share/applications/droiddesk-debian/
+~/.local/share/droiddesk-debian-wrappers/
+```
+
+Applications launched from these entries run inside Debian PRoot. Their logs are written to the active native temporary directory as `droiddesk-<application>.log`.
 
 ### Review the diagnostic log
 
