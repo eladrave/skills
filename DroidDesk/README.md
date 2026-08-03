@@ -20,6 +20,7 @@ Official Linux packages such as Chrome and Warp require glibc and cannot run dir
 |---|---|---|
 | `install-deb.sh` | Install a local ARM64 or architecture-independent `.deb` package | Validates metadata and architecture, installs dependencies, verifies installation, and bridges eligible GUI launchers into the DroidDesk menu |
 | `install-chrome.sh` | Install Google Chrome stable for ARM64 | Adds the required `--no-sandbox` PRoot launcher and a native DroidDesk menu entry |
+| `add-chrome-shortcut.sh` | Add shortcuts for an existing Chrome installation | Does not reinstall Chrome; creates both an XFCE application-menu entry and desktop icon |
 | `install-codex.sh` | Install OpenAI Codex CLI | Tests the Codex sandbox and creates an explicit `codex-proot` fallback when required |
 | `install-warp.sh` | Install Warp Terminal for ARM64 | Checks glibc, adds graphics environment settings, and creates a native DroidDesk menu entry |
 
@@ -80,6 +81,16 @@ google-chrome-droiddesk
 ```
 
 Chrome's normal Linux namespace sandbox cannot initialize inside Android PRoot. The installer creates a launcher using `--no-sandbox`. This weakens renderer isolation, so Chrome should only be used with trusted sites in this environment.
+
+### Add shortcuts without reinstalling Chrome
+
+If Chrome is already installed, run this from DroidDesk's normal terminal, not from inside the Debian shell:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/add-chrome-shortcut.sh | bash
+```
+
+This verifies the existing Debian Chrome installation, recreates the `--no-sandbox` compatibility wrapper, adds **Google Chrome (Debian)** to the XFCE application menu, creates a desktop icon, and refreshes the panel and desktop. It does not download or reinstall Chrome.
 
 ## Install OpenAI Codex CLI
 
@@ -180,6 +191,7 @@ The scripts write logs to the active temporary directory. Typical paths are:
 ```text
 /tmp/droiddesk-install-deb.log
 /tmp/droiddesk-install-chrome.log
+/tmp/droiddesk-add-chrome-shortcut.log
 /tmp/droiddesk-install-codex.log
 /tmp/droiddesk-install-warp.log
 ```
