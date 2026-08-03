@@ -66,6 +66,72 @@ standalone_prefix() {
   fi
 }
 
+install_standalone_menu_bridge() {
+  local prefix=$1 launcher rootfs desktop_dir wrapper_dir wrapper desktop icon_value icon_candidate
+  local wrapper_tmp desktop_tmp
+  prefix=${prefix%/}
+  launcher="$prefix/bin/start-debian"
+  rootfs="$prefix/var/lib/proot-distro/installed-rootfs/debian"
+  desktop_dir="$HOME/.local/share/applications/droiddesk-debian"
+  wrapper_dir="$HOME/.local/share/droiddesk-debian-wrappers"
+  wrapper="$wrapper_dir/warp-terminal.sh"
+  desktop="$desktop_dir/droiddesk-debian-warp-terminal.desktop"
+  mkdir -p "$desktop_dir" "$wrapper_dir"
+
+  wrapper_tmp=$(mktemp); TEMP_PATHS+=("$wrapper_tmp")
+  {
+    printf '#!%s\n' "$prefix/bin/bash"
+    printf '%s\n' 'set -uo pipefail'
+    printf 'START_DEBIAN=%q\n' "$launcher"
+    printf 'DEFAULT_LOG_DIR=%q\n' "${prefix%/usr}/tmp"
+    cat <<'WRAPPER'
+APP_COMMAND=/usr/local/bin/warp-terminal-droiddesk
+APP_ID=warp-terminal
+LOG_DIR="${TMPDIR:-$DEFAULT_LOG_DIR}"
+[[ -d "$LOG_DIR" ]] || LOG_DIR="$DEFAULT_LOG_DIR"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/droiddesk-$APP_ID.log"
+{
+  printf 'exec %s' "$APP_COMMAND"
+  for argument in "$@"; do
+    printf ' %q' "$argument"
+  done
+  printf '\n'
+} | "$START_DEBIAN" >> "$LOG_FILE" 2>&1
+status=$?
+if (( status != 0 )) && command -v notify-send >/dev/null 2>&1; then
+  notify-send "Warp Terminal failed" "See $LOG_FILE"
+fi
+exit "$status"
+WRAPPER
+  } > "$wrapper_tmp"
+  install -m 0755 "$wrapper_tmp" "$wrapper"
+
+  icon_value="application-x-executable"
+  icon_candidate=$(find \
+    "$rootfs/usr/share/icons" "$rootfs/usr/share/pixmaps" "$rootfs/opt" \
+    -type f \( -iname '*warp*.png' -o -iname '*warp*.svg' -o -iname '*warp*.xpm' \) \
+    -print -quit 2>/dev/null || true)
+  [[ -n "$icon_candidate" ]] && icon_value="$icon_candidate"
+  desktop_tmp=$(mktemp); TEMP_PATHS+=("$desktop_tmp")
+  {
+    printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Version=1.0'
+    printf '%s\n' 'Name=Warp Terminal (Debian)'
+    printf '%s\n' 'Comment=Warp Terminal running inside DroidDesk Debian PRoot'
+    printf 'Exec=%s %%U\n' "$wrapper"
+    printf 'TryExec=%s\n' "$wrapper"
+    printf 'Icon=%s\n' "$icon_value"
+    printf '%s\n' 'Terminal=false' 'Categories=System;TerminalEmulator;' 'StartupNotify=true' 'NoDisplay=false' 'X-DroidDesk-PRoot=true'
+  } > "$desktop_tmp"
+  install -m 0644 "$desktop_tmp" "$desktop"
+
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+  if command -v pgrep >/dev/null 2>&1 && pgrep -x xfce4-panel >/dev/null 2>&1; then
+    xfce4-panel --restart >/dev/null 2>&1 &
+  fi
+  ok "Added Warp Terminal (Debian) to the DroidDesk UI menu."
+}
+
 run_from_standalone() {
   local prefix launcher
   prefix=$(standalone_prefix)
@@ -80,8 +146,9 @@ run_from_standalone() {
     curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 "$SELF_URL"; } | "$launcher"; then
     die "$APP_NAME installation inside the standalone DroidDesk Debian PRoot failed."
   fi
+  install_standalone_menu_bridge "$prefix"
   ok "$APP_NAME installation completed inside Debian."
-  info "Open DroidDesk's Debian terminal and run: warp-terminal-droiddesk"
+  info "Launch Warp Terminal (Debian) from the DroidDesk UI menu, or run warp-terminal-droiddesk from the Debian shell."
   exit 0
 }
 
