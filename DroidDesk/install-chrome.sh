@@ -51,6 +51,40 @@ is_termux_host() {
   ! is_debian_environment && [[ -r "$HOME/start-proot.sh" ]]
 }
 
+is_standalone_droiddesk() {
+  ! is_debian_environment && {
+    [[ "${PREFIX:-}" == */com.orailnoor.droiddesk/files/usr ]] ||
+      [[ "$HOME" == */com.orailnoor.droiddesk/files/home ]]
+  }
+}
+
+standalone_prefix() {
+  if [[ -n "${PREFIX:-}" ]]; then
+    printf '%s\n' "$PREFIX"
+  else
+    printf '%s/usr\n' "${HOME%/home}"
+  fi
+}
+
+run_from_standalone() {
+  local prefix launcher
+  prefix=$(standalone_prefix)
+  launcher="$prefix/bin/start-debian"
+  command -v curl >/dev/null 2>&1 || die "curl is missing from DroidDesk's native environment. Install it from DroidDesk's Add applications screen."
+  if [[ ! -x "$launcher" ]]; then
+    die "The standalone DroidDesk APK needs its Debian PRoot first. In DroidDesk, open Add applications, install 'Debian (PRoot)', then rerun this command."
+  fi
+
+  info "Detected the standalone DroidDesk APK. Installing $APP_NAME inside its Debian PRoot."
+  if ! { printf '%s\n' 'export DROIDDESK_INSTALL_FROM_HOST=1'; \
+    curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 "$SELF_URL"; } | "$launcher"; then
+    die "$APP_NAME installation inside the standalone DroidDesk Debian PRoot failed."
+  fi
+  ok "$APP_NAME installation completed inside Debian."
+  info "Open DroidDesk's Debian terminal and run: google-chrome-droiddesk"
+  exit 0
+}
+
 configured_distro() {
   local launcher="$HOME/start-proot.sh" distro=""
   [[ -r "$launcher" ]] || return 1
@@ -134,6 +168,9 @@ WRAPPER
 }
 
 main() {
+  if is_standalone_droiddesk; then
+    run_from_standalone
+  fi
   if is_termux_host; then
     run_from_termux
   fi
