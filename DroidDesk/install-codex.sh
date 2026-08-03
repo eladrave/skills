@@ -7,6 +7,8 @@ LOG_DIR="${TMPDIR:-/tmp}"
 [[ -d "$LOG_DIR" ]] || LOG_DIR="/tmp"
 LOG_FILE="$LOG_DIR/droiddesk-install-codex.log"
 TEMP_PATHS=()
+CODEX_HOST_COMMAND=""
+CODEX_PROOT_HOST_COMMAND=""
 
 if [[ -t 1 ]]; then
   RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'; BLUE=$'\033[0;34m'; RESET=$'\033[0m'
@@ -65,8 +67,68 @@ standalone_prefix() {
   fi
 }
 
+has_codex_proot_fallback() {
+  local launcher=$1
+  "$launcher" <<'DROIDDESK_DEBIAN' >/dev/null 2>&1
+test -x /usr/local/bin/codex-proot
+DROIDDESK_DEBIAN
+}
+
+install_command_bridge() {
+  local prefix=$1 requested_name=$2 inner_command=$3
+  local target_name=$requested_name target wrapper_tmp
+  target="$prefix/bin/$target_name"
+  if [[ -e "$target" ]] && ! grep -q '^# DROIDDESK_CODEX_BRIDGE=1$' "$target" 2>/dev/null; then
+    target_name="$requested_name-droiddesk"
+    target="$prefix/bin/$target_name"
+    warn "$prefix/bin/$requested_name already exists and was not overwritten. Creating '$target_name' instead."
+  fi
+
+  wrapper_tmp=$(mktemp); TEMP_PATHS+=("$wrapper_tmp")
+  {
+    printf '#!%s\n' "$prefix/bin/bash"
+    printf '%s\n' '# DROIDDESK_CODEX_BRIDGE=1' 'set -Eeuo pipefail'
+    printf 'PREFIX_PATH=%q\n' "$prefix"
+    printf 'INNER_COMMAND=%q\n' "$inner_command"
+    cat <<'BRIDGE'
+BASE_DIR="${PREFIX_PATH%/usr}"
+HOST_TMP="$BASE_DIR/tmp"
+PROOT_BIN="$PREFIX_PATH/bin/proot-distro"
+[[ -x "$PROOT_BIN" ]] || { printf '%s\n' '[ERROR] proot-distro is missing.' >&2; exit 1; }
+[[ -d "$PWD" ]] || { printf '%s\n' '[ERROR] The current directory is unavailable.' >&2; exit 1; }
+mkdir -p "$HOST_TMP/proot" "$HOST_TMP/droiddesk-workspace"
+export TMPDIR="$HOST_TMP"
+exec "$PROOT_BIN" login debian \
+  --bind "$HOST_TMP:/tmp" \
+  --bind "$PWD:/tmp/droiddesk-workspace" \
+  --env PROOT_TMP_DIR="$HOST_TMP/proot" \
+  --env PROOT_LOADER="$PREFIX_PATH/libexec/proot/loader" \
+  --env PROOT_LOADER_32="$PREFIX_PATH/libexec/proot/loader32" -- \
+  env DISPLAY="${DISPLAY:-:0}" TERM="${TERM:-xterm-256color}" \
+  /bin/bash -c 'cd /tmp/droiddesk-workspace && exec "$0" "$@"' "$INNER_COMMAND" "$@"
+BRIDGE
+  } > "$wrapper_tmp"
+  install -m 0755 "$wrapper_tmp" "$target"
+
+  case "$requested_name" in
+    codex) CODEX_HOST_COMMAND=$target_name ;;
+    codex-proot) CODEX_PROOT_HOST_COMMAND=$target_name ;;
+  esac
+}
+
+create_native_commands() {
+  local prefix=$1 launcher=$2
+  install_command_bridge "$prefix" codex /usr/local/bin/codex
+  ok "Created interactive XFCE command: $CODEX_HOST_COMMAND"
+  if has_codex_proot_fallback "$launcher"; then
+    install_command_bridge "$prefix" codex-proot /usr/local/bin/codex-proot
+    ok "Created explicit no-sandbox fallback command: $CODEX_PROOT_HOST_COMMAND"
+    warn "$CODEX_PROOT_HOST_COMMAND retains approval prompts but has full access to files visible inside Debian PRoot."
+  fi
+}
+
 run_from_standalone() {
-  local prefix launcher
+  local prefix launcher version
   prefix=$(standalone_prefix)
   launcher="$prefix/bin/start-debian"
   command -v curl >/dev/null 2>&1 || die "curl is missing from DroidDesk's native environment. Install it from DroidDesk's Add applications screen."
@@ -79,8 +141,12 @@ run_from_standalone() {
     curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 "$SELF_URL"; } | "$launcher"; then
     die "$APP_NAME installation inside the standalone DroidDesk Debian PRoot failed."
   fi
+  create_native_commands "$prefix" "$launcher"
+  version=$("$prefix/bin/$CODEX_HOST_COMMAND" --version 2>/dev/null || true)
+  [[ -n "$version" ]] || die "The native Codex bridge was created, but its version check failed."
   ok "$APP_NAME installation completed inside Debian."
-  info "Open DroidDesk's Debian terminal and run: codex login --device-auth"
+  ok "Native bridge verified: $version"
+  info "From the XFCE terminal, authenticate with: $CODEX_HOST_COMMAND login --device-auth"
   exit 0
 }
 
