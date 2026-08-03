@@ -22,6 +22,7 @@ Official Linux packages such as Chrome and Warp require glibc and cannot run dir
 | `install-chrome.sh` | Install Google Chrome stable for ARM64 | Adds the required `--no-sandbox` PRoot launcher and a native DroidDesk menu entry |
 | `add-chrome-shortcut.sh` | Add shortcuts for an existing Chrome installation | Does not reinstall Chrome; creates both an XFCE application-menu entry and desktop icon |
 | `install-codex.sh` | Install OpenAI Codex CLI | Tests the Codex sandbox and creates an explicit `codex-proot` fallback when required |
+| `add-codex-command.sh` | Expose an existing Debian Codex installation in the XFCE terminal | Creates an interactive native-to-PRoot command bridge without reinstalling Codex |
 | `install-warp.sh` | Install Warp Terminal for ARM64 | Checks glibc, adds graphics environment settings, and creates a native DroidDesk menu entry |
 | `add-warp-shortcut.sh` | Add shortcuts for an existing Warp installation | Does not reinstall Warp; creates both an XFCE application-menu entry and desktop icon |
 
@@ -113,6 +114,20 @@ codex login status
 
 The installer tests whether the Codex Linux command sandbox can initialize under PRoot. If it cannot, the installer creates `codex-proot`. That fallback retains Codex approval prompts but deliberately disables its operating-system sandbox. The normal `codex` command is never silently weakened.
 
+On the standalone APK, the installer also creates an interactive `codex` command in DroidDesk's native `$PREFIX/bin`. The bridge preserves the terminal, forwards arguments, and binds the XFCE terminal's current directory into Debian as `/tmp/droiddesk-workspace`, allowing Codex to operate on the directory from which it was launched.
+
+### Add the XFCE command without reinstalling Codex
+
+If Codex is already installed but the XFCE terminal reports `codex: command not found`, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eladrave/skills/main/DroidDesk/add-codex-command.sh | bash
+```
+
+Run that command from the terminal inside DroidDesk's XFCE desktop, not from the Debian shell. It verifies the existing Debian installation and creates the native interactive bridge without downloading or reinstalling Codex.
+
+If the installer previously determined that the normal Codex sandbox cannot run under PRoot, the updater also exposes the explicit `codex-proot` fallback. It never silently redirects `codex` to the unsandboxed fallback.
+
 ## Install Warp Terminal
 
 ```bash
@@ -195,6 +210,10 @@ Standalone menu bridges are stored under:
 
 Applications launched from these entries run inside Debian PRoot. Their logs are written to the active native temporary directory as `droiddesk-<application>.log`.
 
+### Codex is not found in the XFCE terminal
+
+Codex is installed inside Debian, while the XFCE terminal runs in DroidDesk's native environment. Run `add-codex-command.sh` from the XFCE terminal to create an interactive command bridge. Afterward, `codex --version` and `codex login --device-auth` should work directly from that terminal.
+
 ### Review the diagnostic log
 
 The scripts write logs to the active temporary directory. Typical paths are:
@@ -204,6 +223,7 @@ The scripts write logs to the active temporary directory. Typical paths are:
 /tmp/droiddesk-install-chrome.log
 /tmp/droiddesk-add-chrome-shortcut.log
 /tmp/droiddesk-install-codex.log
+/tmp/droiddesk-add-codex-command.log
 /tmp/droiddesk-install-warp.log
 /tmp/droiddesk-add-warp-shortcut.log
 ```
