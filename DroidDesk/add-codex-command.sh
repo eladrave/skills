@@ -148,7 +148,8 @@ main() {
   version=$("$prefix/bin/$CODEX_HOST_COMMAND" --version 2>/dev/null || true)
   [[ -n "$version" ]] || die "The native Codex bridge was created, but its version check failed."
   ok "Native bridge verified: $version"
-  info "Authenticate from this XFCE terminal with: $CODEX_HOST_COMMAND login --device-auth"
+  info "If authentication is needed, open DroidDesk's Debian shell and run: codex login --device-auth"
+  info "Then return to the XFCE terminal and check: $CODEX_HOST_COMMAND login status"
 }
 
 main "$@"
