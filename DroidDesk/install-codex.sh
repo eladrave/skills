@@ -146,7 +146,8 @@ run_from_standalone() {
   [[ -n "$version" ]] || die "The native Codex bridge was created, but its version check failed."
   ok "$APP_NAME installation completed inside Debian."
   ok "Native bridge verified: $version"
-  info "From the XFCE terminal, authenticate with: $CODEX_HOST_COMMAND login --device-auth"
+  info "Open DroidDesk's Debian shell and authenticate with: codex login --device-auth"
+  info "Then return to the XFCE terminal and check: $CODEX_HOST_COMMAND login status"
   exit 0
 }
 
