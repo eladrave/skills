@@ -82,6 +82,161 @@ standalone_prefix() {
   fi
 }
 
+encode_menu_field() {
+  printf '%s' "$1" | base64 | tr -d '\n'
+}
+
+resolve_desktop_icon() {
+  local icon=$1 candidate extension size
+  [[ -n "$icon" ]] || return 1
+  if [[ "$icon" == /* && -f "$icon" ]]; then
+    printf '%s\n' "$icon"
+    return 0
+  fi
+  for size in 512 256 192 128 96 64 48 32; do
+    for extension in png svg xpm; do
+      candidate="/usr/share/icons/hicolor/${size}x${size}/apps/${icon}.${extension}"
+      if [[ -f "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+  done
+  for candidate in "/usr/share/pixmaps/$icon" "/usr/share/pixmaps/$icon.png" "/usr/share/pixmaps/$icon.svg"; do
+    if [[ -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  find /usr/share/icons /usr/share/pixmaps -type f \
+    \( -name "$icon" -o -name "$icon.png" -o -name "$icon.svg" -o -name "$icon.xpm" \) \
+    -print -quit 2>/dev/null
+}
+
+export_desktop_entries() {
+  local package_name=$1 manifest=${DROIDDESK_MENU_MANIFEST:-}
+  local desktop desktop_id name command icon terminal categories icon_path
+  [[ -n "$manifest" ]] || return 0
+  command -v base64 >/dev/null 2>&1 || { warn "Cannot export menu entries because base64 is missing inside Debian."; return 0; }
+  : > "$manifest" || { warn "Cannot write the DroidDesk menu manifest: $manifest"; return 0; }
+
+  while IFS= read -r desktop; do
+    [[ -f "$desktop" ]] || continue
+    grep -qi '^NoDisplay=true$' "$desktop" && continue
+    grep -qi '^Hidden=true$' "$desktop" && continue
+    desktop_id=$(basename "$desktop" .desktop)
+    desktop_id=$(printf '%s' "$desktop_id" | tr -c 'a-zA-Z0-9._-' '-')
+    name=$(sed -n 's/^Name=//p' "$desktop" | head -n 1)
+    command=$(sed -n 's/^Exec=//p' "$desktop" | head -n 1)
+    icon=$(sed -n 's/^Icon=//p' "$desktop" | head -n 1)
+    terminal=$(sed -n 's/^Terminal=//p' "$desktop" | head -n 1)
+    categories=$(sed -n 's/^Categories=//p' "$desktop" | head -n 1)
+    [[ -n "$name" && -n "$command" ]] || continue
+    command=$(printf '%s' "$command" | sed -E 's/[[:space:]]*%[fFuUdDnNickvm]//g; s/%%/%/g')
+    [[ -n "$command" ]] || continue
+    icon_path=$(resolve_desktop_icon "$icon" || true)
+    [[ "$terminal" == "true" ]] || terminal="false"
+    [[ -n "$categories" ]] || categories="Utility;"
+    printf '%s|%s|%s|%s|%s|%s\n' \
+      "$desktop_id" \
+      "$(encode_menu_field "$name")" \
+      "$(encode_menu_field "$command")" \
+      "$(encode_menu_field "$icon_path")" \
+      "$terminal" \
+      "$(encode_menu_field "$categories")" >> "$manifest"
+  done < <(dpkg-query -L "$package_name" 2>/dev/null | awk '/\/share\/applications\/[^/]+\.desktop$/')
+}
+
+decode_menu_field() {
+  printf '%s' "$1" | base64 -d 2>/dev/null
+}
+
+install_standalone_menu_bridges() {
+  local manifest=$1 prefix=$2 launcher rootfs desktop_dir wrapper_dir
+  local desktop_id name64 command64 icon64 terminal categories64
+  local name command icon_guest categories icon_value wrapper desktop wrapper_tmp desktop_tmp count=0
+
+  [[ -s "$manifest" ]] || { warn "The package installed no eligible GUI desktop entries, so no DroidDesk menu item was added."; return 0; }
+  command -v base64 >/dev/null 2>&1 || { warn "The package installed, but the native base64 command is missing, so its menu entry could not be created."; return 0; }
+  launcher="$prefix/bin/start-debian"
+  rootfs="$prefix/var/lib/proot-distro/installed-rootfs/debian"
+  desktop_dir="$HOME/.local/share/applications/droiddesk-debian"
+  wrapper_dir="$HOME/.local/share/droiddesk-debian-wrappers"
+  mkdir -p "$desktop_dir" "$wrapper_dir"
+
+  while IFS='|' read -r desktop_id name64 command64 icon64 terminal categories64; do
+    [[ "$desktop_id" =~ ^[a-zA-Z0-9._-]+$ ]] || { warn "Skipping an invalid desktop entry identifier: $desktop_id"; continue; }
+    name=$(decode_menu_field "$name64") || { warn "Skipping '$desktop_id': invalid encoded name."; continue; }
+    command=$(decode_menu_field "$command64") || { warn "Skipping '$desktop_id': invalid encoded command."; continue; }
+    icon_guest=$(decode_menu_field "$icon64") || icon_guest=""
+    categories=$(decode_menu_field "$categories64") || categories="Utility;"
+    [[ -n "$name" && -n "$command" ]] || continue
+    [[ "$terminal" == "true" ]] || terminal="false"
+    [[ -n "$categories" ]] || categories="Utility;"
+
+    wrapper="$wrapper_dir/$desktop_id.sh"
+    desktop="$desktop_dir/droiddesk-debian-$desktop_id.desktop"
+    wrapper_tmp=$(mktemp); TEMP_PATHS+=("$wrapper_tmp")
+    {
+      printf '#!%s\n' "$prefix/bin/bash"
+      printf '%s\n' 'set -uo pipefail'
+      printf 'START_DEBIAN=%q\n' "$launcher"
+      printf 'DEFAULT_LOG_DIR=%q\n' "${prefix%/usr}/tmp"
+      printf 'APP_COMMAND=%q\n' "$command"
+      printf 'APP_ID=%q\n' "$desktop_id"
+      cat <<'WRAPPER'
+LOG_DIR="${TMPDIR:-$DEFAULT_LOG_DIR}"
+[[ -d "$LOG_DIR" ]] || LOG_DIR="$DEFAULT_LOG_DIR"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/droiddesk-$APP_ID.log"
+{
+  printf 'exec %s' "$APP_COMMAND"
+  for argument in "$@"; do
+    printf ' %q' "$argument"
+  done
+  printf '\n'
+} | "$START_DEBIAN" >> "$LOG_FILE" 2>&1
+status=$?
+if (( status != 0 )) && command -v notify-send >/dev/null 2>&1; then
+  notify-send "DroidDesk Debian application failed" "See $LOG_FILE"
+fi
+exit "$status"
+WRAPPER
+    } > "$wrapper_tmp"
+    install -m 0755 "$wrapper_tmp" "$wrapper"
+
+    icon_value="application-x-executable"
+    if [[ "$icon_guest" == /* && -f "$rootfs$icon_guest" ]]; then
+      icon_value="$rootfs$icon_guest"
+    fi
+    desktop_tmp=$(mktemp); TEMP_PATHS+=("$desktop_tmp")
+    {
+      printf '%s\n' '[Desktop Entry]'
+      printf '%s\n' 'Type=Application' 'Version=1.0'
+      printf 'Name=%s (Debian)\n' "$name"
+      printf '%s\n' 'Comment=Runs inside DroidDesk Debian PRoot'
+      printf 'Exec=%s %%U\n' "$wrapper"
+      printf 'TryExec=%s\n' "$wrapper"
+      printf 'Icon=%s\n' "$icon_value"
+      printf 'Terminal=%s\n' "$terminal"
+      printf 'Categories=%s\n' "$categories"
+      printf '%s\n' 'StartupNotify=true' 'NoDisplay=false' 'X-DroidDesk-PRoot=true'
+    } > "$desktop_tmp"
+    install -m 0644 "$desktop_tmp" "$desktop"
+    count=$((count + 1))
+  done < "$manifest"
+
+  if (( count > 0 )); then
+    command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+    if command -v pgrep >/dev/null 2>&1 && pgrep -x xfce4-panel >/dev/null 2>&1; then
+      xfce4-panel --restart >/dev/null 2>&1 &
+    fi
+    ok "Added $count Debian application launcher(s) to the DroidDesk UI menu."
+  else
+    warn "No usable DroidDesk UI menu launchers could be created."
+  fi
+}
+
 require_one_argument() {
   if (( $# != 1 )); then
     usage >&2
@@ -138,7 +293,7 @@ configured_distro() {
 }
 
 run_from_standalone() {
-  local source_path prefix launcher shared_tmp staged guest_path
+  local source_path prefix launcher shared_tmp staged guest_path manifest guest_manifest
   source_path=$1
   prefix=$(standalone_prefix)
   launcher="$prefix/bin/start-debian"
@@ -152,19 +307,24 @@ run_from_standalone() {
   mkdir -p "$shared_tmp" || die "Could not create DroidDesk's shared temporary directory: $shared_tmp"
   staged=$(mktemp "$shared_tmp/droiddesk-package.XXXXXX") || die "Could not create a temporary package file."
   TEMP_PATHS+=("$staged")
+  manifest=$(mktemp "$shared_tmp/droiddesk-menu.XXXXXX") || die "Could not create a temporary menu manifest."
+  TEMP_PATHS+=("$manifest")
   cp -- "$source_path" "$staged" || die "Could not copy the package into DroidDesk's Debian-visible temporary directory."
   [[ -s "$staged" ]] || die "The supplied package is empty: $source_path"
   guest_path="/tmp/${staged##*/}"
+  guest_manifest="/tmp/${manifest##*/}"
 
   info "Detected the standalone DroidDesk APK."
   info "Copying the package into Debian PRoot and starting installation."
   if ! {
     printf '%s\n' 'export DROIDDESK_INSTALL_FROM_HOST=1'
+    printf 'export DROIDDESK_MENU_MANIFEST=%q\n' "$guest_manifest"
     printf 'set -- %q\n' "$guest_path"
     curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 "$SELF_URL"
   } | "$launcher"; then
     die "Package installation inside DroidDesk's Debian PRoot failed."
   fi
+  install_standalone_menu_bridges "$manifest" "$prefix"
   exit 0
 }
 
@@ -183,6 +343,10 @@ run_from_termux() {
     | proot-distro login "$distro" --user root --bind "$source_path:$guest_path" -- \
       env DROIDDESK_INSTALL_FROM_HOST=1 bash -s -- "$guest_path"; then
     die "Package installation inside PRoot '$distro' failed."
+  fi
+  if [[ -f "$HOME/proot-menu-sync.sh" ]]; then
+    info "Synchronizing the DroidDesk application menu."
+    bash "$HOME/proot-menu-sync.sh" "$distro" || warn "Installation succeeded, but menu synchronization failed. Run: bash ~/proot-menu-sync.sh $distro"
   fi
   exit 0
 }
@@ -259,6 +423,7 @@ install_package() {
   if (( desktop_count > 0 )); then
     info "The package installed $desktop_count desktop launcher(s). Reopen DroidDesk's Debian applications list if they are not immediately visible."
   fi
+  export_desktop_entries "$PACKAGE_NAME"
   warn "Installation does not guarantee runtime compatibility with Android PRoot. Packages may still require application-specific flags, libraries, graphics support, systemd, or unavailable kernel features."
 }
 
