@@ -1,6 +1,12 @@
 # DroidDesk application installers
 
-These standalone installers target ARM64 Android devices running DroidDesk. They can be invoked from the normal Termux shell or from inside DroidDesk's Debian-family PRoot environment.
+These standalone installers target ARM64 Android devices running DroidDesk. They support:
+
+- The Termux plus Termux-X11 setup, including its generated `~/start-proot.sh` launcher.
+- The standalone DroidDesk APK, using its optional Debian PRoot environment.
+- Direct execution from inside a Debian-family PRoot environment.
+
+For the standalone APK on a non-rooted phone, first open **Add applications** in DroidDesk and install **Debian (PRoot)**. The official Chrome and Warp Linux packages require glibc and cannot run directly in DroidDesk's native Android/Bionic userspace.
 
 ## Install Google Chrome
 
