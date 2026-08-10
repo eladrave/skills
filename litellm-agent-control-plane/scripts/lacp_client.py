@@ -10,6 +10,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import socket
 import stat
 import sys
@@ -146,7 +147,13 @@ class LacpClient:
         self.base_url = profile.url.rstrip("/")
         self.timeout = timeout
 
-    def request(self, method: str, path: str, body: Any | None = None) -> tuple[bytes, str]:
+    def request(
+        self,
+        method: str,
+        path: str,
+        body: Any | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[bytes, str]:
         data = None
         headers = {
             "Accept": "application/json",
@@ -156,6 +163,10 @@ class LacpClient:
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
+        if extra_headers:
+            if any(name.lower() == "authorization" for name in extra_headers):
+                raise LacpError("extra headers must not replace LACP authorization")
+            headers.update(extra_headers)
         request = Request(f"{self.base_url}{path}", data=data, headers=headers, method=method)
         try:
             with urlopen(request, timeout=self.timeout) as response:
@@ -166,8 +177,14 @@ class LacpClient:
         except (URLError, TimeoutError, socket.timeout) as exc:
             raise LacpError(f"could not reach LACP at {self.base_url}: {exc}") from exc
 
-    def json(self, method: str, path: str, body: Any | None = None) -> Any:
-        raw, _ = self.request(method, path, body)
+    def json(
+        self,
+        method: str,
+        path: str,
+        body: Any | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> Any:
+        raw, _ = self.request(method, path, body, extra_headers)
         if not raw:
             return None
         try:
@@ -204,6 +221,156 @@ def inventory(client: LacpClient) -> dict[str, Any]:
     }
     result["warnings"] = warnings
     return result
+
+
+MCP_DEFINITION_FIELDS = {
+    "server_name",
+    "alias",
+    "description",
+    "instructions",
+    "url",
+    "transport",
+    "auth_type",
+    "mcp_info",
+    "mcp_access_groups",
+    "allowed_tools",
+    "tool_name_to_display_name",
+    "tool_name_to_description",
+    "static_headers",
+    "status",
+    "available_on_public_internet",
+    "delegate_auth_to_upstream",
+    "oauth_passthrough",
+    "is_byok",
+    "byok_description",
+    "byok_api_key_help_url",
+    "source_url",
+    "timeout",
+    "approval_status",
+}
+MCP_SECRET_FIELDS = {"credentials", "env", "env_vars", "extra_headers"}
+MCP_SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization", "x-api-key"}
+MCP_VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _read_json_object(path: Path, label: str) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise LacpError(f"{label} must be a JSON object")
+    return value
+
+
+def normalize_mcp_definition(raw: dict[str, Any]) -> dict[str, Any]:
+    secret_fields = sorted(MCP_SECRET_FIELDS & raw.keys())
+    if secret_fields:
+        raise LacpError(
+            "MCP definition must not contain secret-bearing fields: " + ", ".join(secret_fields)
+        )
+    unknown = sorted(set(raw) - MCP_DEFINITION_FIELDS)
+    if unknown:
+        raise LacpError("unsupported MCP definition fields: " + ", ".join(unknown))
+    definition = copy.deepcopy(raw)
+    name = str(definition.get("server_name", "")).strip()
+    if not name:
+        raise LacpError("MCP definition requires server_name")
+    definition["server_name"] = name
+    url = str(definition.get("url", "")).strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise LacpError("MCP definition requires an absolute http(s) url")
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
+        raise LacpError("remote MCP URLs must use HTTPS")
+    definition["url"] = url
+    headers = definition.get("static_headers", {})
+    if not isinstance(headers, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str) for key, value in headers.items()
+    ):
+        raise LacpError("MCP static_headers must be an object of string values")
+    for header, value in headers.items():
+        if header.lower() in MCP_SENSITIVE_HEADERS and not MCP_VARIABLE.search(value):
+            raise LacpError(f"MCP header {header} must use a ${{VARIABLE}} placeholder")
+    tools = definition.get("allowed_tools", [])
+    if not isinstance(tools, list) or any(not isinstance(item, str) or not item.strip() for item in tools):
+        raise LacpError("MCP allowed_tools must be a list of non-empty tool names")
+    definition["allowed_tools"] = list(dict.fromkeys(item.strip() for item in tools))
+    info = definition.get("mcp_info", {})
+    if not isinstance(info, dict):
+        raise LacpError("MCP mcp_info must be an object")
+    variables = info.get("variables", [])
+    if not isinstance(variables, list):
+        raise LacpError("MCP mcp_info.variables must be a list")
+    for variable in variables:
+        if not isinstance(variable, dict) or not isinstance(variable.get("name"), str):
+            raise LacpError("each MCP variable requires a name")
+        if variable.get("scope", "instance") not in {"instance", "per_user"}:
+            raise LacpError("MCP variable scope must be instance or per_user")
+    definition.setdefault("transport", "streamable_http")
+    definition.setdefault("approval_status", "active")
+    definition.setdefault("available_on_public_internet", False)
+    return definition
+
+
+def _mcp_variable_names(definition: dict[str, Any]) -> list[str]:
+    serialized = json.dumps(
+        {
+            "url": definition.get("url", ""),
+            "static_headers": definition.get("static_headers", {}),
+        },
+        ensure_ascii=False,
+    )
+    return list(dict.fromkeys(MCP_VARIABLE.findall(serialized)))
+
+
+def discover_mcp_tools(client: LacpClient, definition: dict[str, Any]) -> dict[str, Any]:
+    variables = {
+        name: getpass.getpass(f"Temporary value for {name}: ")
+        for name in _mcp_variable_names(definition)
+    }
+    if any(not value for value in variables.values()):
+        raise LacpError("all MCP discovery variables require a value")
+    return client.json(
+        "POST",
+        "/v1/mcp/discover",
+        {
+            "url": definition["url"],
+            "static_headers": definition.get("static_headers", {}),
+            "variables": variables,
+        },
+    )
+
+
+def register_mcp_server(
+    client: LacpClient,
+    definition: dict[str, Any],
+    apply: bool = False,
+) -> dict[str, Any]:
+    if not apply:
+        return {
+            "mode": "dry-run",
+            "definition": definition,
+            "credential_setup_required": _mcp_variable_names(definition),
+        }
+    created = client.json("POST", "/v1/mcp/server", definition)
+    return {
+        "created": True,
+        "server": created,
+        "credential_setup_required": _mcp_variable_names(definition),
+    }
+
+
+def list_mcp_tools(client: LacpClient, server_id: str, user_id: str) -> dict[str, Any]:
+    server_id = server_id.strip()
+    user_id = user_id.strip()
+    if not server_id:
+        raise LacpError("MCP server ID is required")
+    if not user_id:
+        raise LacpError("MCP user ID is required")
+    return client.json(
+        "GET",
+        f"/v1/mcp/server/{quote(server_id, safe='')}/tools",
+        extra_headers={"x-user-id": user_id},
+    )
 
 
 def _items(value: Any, key: str) -> list[dict[str, Any]]:
@@ -776,6 +943,27 @@ def _resolve_mcp_attachments(client: LacpClient, agent: dict[str, Any], servers:
     config["mcp_servers"] = mcp_servers
 
 
+def _resolve_platform_tools(agent: dict[str, Any], available: set[str], ref: str) -> None:
+    requested = agent.pop("platform_mcp_ids", [])
+    if not isinstance(requested, list) or any(not isinstance(item, str) for item in requested):
+        raise LacpError(f"agent '{ref}' platform_mcp_ids must be a list of IDs")
+    unknown = sorted({item for item in requested if item not in available})
+    if unknown:
+        raise LacpError(f"agent '{ref}' uses unknown platform MCP tools: {', '.join(unknown)}")
+    config = agent.setdefault("config", {})
+    if not isinstance(config, dict):
+        raise LacpError(f"agent '{ref}' config must be an object")
+    existing = config.get("platform_mcp_ids", [])
+    if not isinstance(existing, list) or any(not isinstance(item, str) for item in existing):
+        raise LacpError(f"agent '{ref}' config.platform_mcp_ids must be a list of IDs")
+    combined = list(dict.fromkeys([*existing, *requested]))
+    unknown = sorted({item for item in combined if item not in available})
+    if unknown:
+        raise LacpError(f"agent '{ref}' uses unknown platform MCP tools: {', '.join(unknown)}")
+    if combined:
+        config["platform_mcp_ids"] = combined
+
+
 def _runtime_catalog(client: LacpClient) -> dict[str, dict[str, Any]]:
     response = client.json("GET", "/api/runtime-harnesses")
     return {
@@ -804,6 +992,12 @@ def normalize_blueprint(client: LacpClient, blueprint: dict[str, Any]) -> dict[s
     rules = {str(item.get("id")) for item in _items(client.json("GET", "/api/rules"), "rules")}
     mcp_response = _optional(client, "/v1/mcp/server", [])
     servers = {str(item.get("server_id")): item for item in _items(mcp_response, "data")}
+    platform_response = client.json("GET", "/api/platform-mcps")
+    platform_tools = {
+        str(item.get("id"))
+        for item in _items(platform_response, "platform_mcps")
+        if item.get("id")
+    }
     models_by_runtime: dict[str, set[str]] = {}
     normalized: list[dict[str, Any]] = []
     refs: set[str] = set()
@@ -857,6 +1051,7 @@ def normalize_blueprint(client: LacpClient, blueprint: dict[str, Any]) -> dict[s
         if not isinstance(children, list):
             raise LacpError(f"agent '{ref}' sub_agents must be a list")
         _resolve_mcp_attachments(client, agent, servers)
+        _resolve_platform_tools(agent, platform_tools, ref)
         normalized.append({"ref": ref, "agent": agent, "sub_agents": [str(item) for item in children]})
     for entry in normalized:
         unknown = [item for item in entry["sub_agents"] if item not in refs]
@@ -939,6 +1134,20 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--spec", type=Path, required=True)
     create.add_argument("--apply", action="store_true")
 
+    mcp_discover = sub.add_parser("mcp-discover")
+    mcp_discover.add_argument("--profile", default="default")
+    mcp_discover.add_argument("--spec", type=Path, required=True)
+
+    mcp_add = sub.add_parser("mcp-add")
+    mcp_add.add_argument("--profile", default="default")
+    mcp_add.add_argument("--spec", type=Path, required=True)
+    mcp_add.add_argument("--apply", action="store_true")
+
+    mcp_tools = sub.add_parser("mcp-tools")
+    mcp_tools.add_argument("--profile", default="default")
+    mcp_tools.add_argument("--server-id", required=True)
+    mcp_tools.add_argument("--user-id", default="default")
+
     backup = sub.add_parser("backup")
     backup.add_argument("--profile", default="default")
     backup.add_argument("--output", type=Path, required=True)
@@ -983,9 +1192,17 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "inventory":
             _json_print(inventory(client))
         elif args.command == "create":
-            blueprint = json.loads(args.spec.read_text(encoding="utf-8"))
+            blueprint = _read_json_object(args.spec, "agent blueprint")
             normalized = normalize_blueprint(client, blueprint)
             _json_print(apply_blueprint(client, normalized) if args.apply else {"mode": "dry-run", **normalized})
+        elif args.command == "mcp-discover":
+            definition = normalize_mcp_definition(_read_json_object(args.spec, "MCP definition"))
+            _json_print(discover_mcp_tools(client, definition))
+        elif args.command == "mcp-add":
+            definition = normalize_mcp_definition(_read_json_object(args.spec, "MCP definition"))
+            _json_print(register_mcp_server(client, definition, apply=args.apply))
+        elif args.command == "mcp-tools":
+            _json_print(list_mcp_tools(client, args.server_id, args.user_id))
         elif args.command == "backup":
             archive = create_backup(client)
             write_backup(args.output, archive, force=args.force)

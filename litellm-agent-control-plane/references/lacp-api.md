@@ -15,9 +15,10 @@ Use this local blueprint shape. It is translated into existing LACP
       "description": "Collects source-backed evidence.",
       "runtime": "configured-runtime-alias",
       "model": "available-model-id",
-      "system": "Complete, self-contained operating instructions.",
+      "system": "Complete, self-contained instructions following agent-design.md.",
       "tools": [{"type": "bash"}],
       "mcp_server_ids": ["mcp_server_id"],
+      "platform_mcp_ids": ["request_human_approval"],
       "skill_ids": ["skill_id"],
       "rule_ids": ["rule_id"],
       "vault_keys": ["KEY_NAME"],
@@ -31,7 +32,7 @@ Use this local blueprint shape. It is translated into existing LACP
       "owner_id": "local-user",
       "runtime": "configured-runtime-alias",
       "model": "available-model-id",
-      "system": "Delegate evidence collection, verify results, and synthesize the answer.",
+      "system": "Follow the orchestrator contract in multi-agent.md. Send complete child prompts, inspect each returned status and output, reconcile conflicts, and synthesize only verified results.",
       "sub_agents": ["researcher"]
     }
   ]
@@ -44,8 +45,18 @@ Rules:
 - Require `name`, `owner_id`, `runtime`, `model`, and a non-empty `system`.
 - Use only IDs returned by `inventory`.
 - Put integration IDs in `mcp_server_ids`; do not author `mcp_toolset` entries.
+- Put LACP built-in tool IDs in `platform_mcp_ids`; do not mix them with
+  registered integration IDs.
 - Put symbolic agent refs, not IDs, in `sub_agents`.
+- Use only native tool types returned for the selected runtime.
+- Keep secrets out of every blueprint field. `vault_keys` contains names only.
+- Review instructions with `agent-design.md` and multi-agent relationships with
+  `multi-agent.md` before applying.
 - Agents are created paused. Activation is a separate operator decision.
+
+The helper copies `system` to both the managed agent system and prompt fields,
+puts resolved attachments into `config`, removes stale integration toolsets,
+and patches real child IDs only after every agent has been created.
 
 ## Existing API resources used
 
@@ -61,6 +72,9 @@ Rules:
 | Memory | `GET/POST /api/agents/{id}/memory` | `POST` |
 | Files | `GET/PUT /api/agents/{id}/files/{path}` | `PUT` |
 | MCP definitions | `GET/POST /v1/mcp/server` | sanitized `POST` |
+| MCP discovery | `POST /v1/mcp/discover` | none; test only |
+| MCP tools | `GET/POST /v1/mcp/server/{id}/tools` | none; discovery/test only |
+| Platform MCP tools | `GET /api/platform-mcps` | selected in agent `config` |
 | MCP proxy setting | `GET/PUT /v1/mcp/settings/proxy-base-url` | optional `PUT` |
 | Providers | `GET /api/providers` | secrets must be re-entered |
 | Vault | key-name list endpoints | values must be re-entered |
@@ -87,6 +101,11 @@ REST responses deliberately do not expose provider/runtime API keys or vault
 values. MCP credentials and inline authorization values are redacted by the
 helper. Restore reports the names and metadata needed for an operator to
 re-enter them.
+
+Portable restore can recreate sanitized MCP registry definitions, but it cannot
+prove that their endpoints, OAuth clients, per-user values, allowlisted schemas,
+or proxy routes are still valid. Re-run the MCP acceptance sequence in
+`mcp.md` before activating restored agents.
 
 Static agents loaded from server configuration can be represented in the
 archive, but REST restore turns them into paused database-backed managed agents.

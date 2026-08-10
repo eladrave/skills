@@ -1,102 +1,129 @@
 ---
 name: lacp-agent-builder
-description: Design, create, back up, and restore agents on a remote LiteLLM Agent Control Plane (LACP) through its existing REST API. Use when a user asks Codex to create one or more LACP agents, choose between a single agent and an orchestrator with specialists, inspect an LACP installation, make a portable backup of agents and settings, or restore that backup to a new or updated LACP instance.
+description: Design, create, test, back up, and restore reliable agents on a remote LiteLLM Agent Control Plane (LACP) through its existing REST API. Use when a user wants to configure an LACP connection; turn a goal into accurate agent instructions; choose a runtime, model, tools, skills, rules, memory, or schedule; decide between one agent and an orchestrator with specialists; register, discover, restrict, attach, or troubleshoot MCP servers and platform MCP tools; validate an agent workflow; or migrate agents and settings between LACP instances.
 ---
 
 # LACP Agent Builder
 
-Use the bundled `scripts/lacp_client.py` for every LACP request. Do not print,
-paste into chat, or place an LACP key in a repository or command argument.
+Use `scripts/lacp_client.py` for LACP requests. Do not print, paste into chat,
+or place an LACP key or integration credential in a repository or command
+argument. Do not install this skill or change LACP server code unless the user
+separately requests it.
 
-## Connect
+## Connect and inspect
 
 1. Run `python3 scripts/lacp_client.py status --profile <profile>`.
-2. If the profile is missing, ask for the LACP URL, then run
+2. If missing, ask for the LACP URL and run
    `python3 scripts/lacp_client.py configure --profile <profile> --url <url>`.
-   Let the script collect the key with its hidden terminal prompt.
-3. Use `default` unless the user names a profile. For migration, use distinct
-   source and target profiles.
-4. Treat authentication failure, an unreachable URL, or an unsupported API as
-   a blocker. Never guess live models, runtimes, integrations, or IDs.
+   Let the helper collect the key with a hidden terminal prompt.
+3. Use `default` unless the user names a profile. Use distinct source and target
+   profiles for migration.
+4. Run `python3 scripts/lacp_client.py inventory --profile <profile>` before
+   designing anything. Use only returned runtimes, models, tools, agent IDs,
+   MCP server IDs, platform MCP IDs, skill IDs, and rule IDs.
+5. Treat authentication failure, an unreachable URL, or an unsupported API as
+   a blocker. Never guess live capabilities or IDs.
 
-The v1 helper accepts any key the target LACP accepts. Recommend the master key
-when full discovery or backup is required because some current administrative
-inventory endpoints require it. Warn that this is a powerful credential and
-that the local profile file is sensitive.
+The helper accepts any key the target accepts. Recommend the master key when
+administrative inventory, MCP registration, backup, or restore is required.
+Warn that it is powerful and that the local profile file is sensitive.
 
-## Design and create agents
+## Design before creating
 
-1. Run `python3 scripts/lacp_client.py inventory --profile <profile>` and use
-   only returned models, runtimes, MCP server IDs, skill IDs, and rule IDs.
-2. Ask for the goal and only material missing constraints: success criteria,
-   repository or data scope, integrations, schedule and timezone, external
-   side effects, approvals, runtime limit, and failure behavior.
-3. Default to one agent. Recommend multiple specialists only for separable
-   work, distinct tools or permissions, useful parallelism, or reusable roles.
-   Add an orchestrator only when the deployed LACP system must coordinate those
-   specialists after this Codex conversation ends.
-4. Prepare a JSON blueprint using `references/lacp-api.md`. Use symbolic `ref`
-   values for sub-agent links; never invent LACP agent IDs.
-5. Run `python3 scripts/lacp_client.py create --profile <profile> --spec <file>`
-   without `--apply`. Show the normalized plan and ask for confirmation.
-6. After confirmation, rerun with `--apply`. The helper creates all agents
-   paused, resolves real child IDs, and patches orchestrators afterward.
-7. Retrieve the created agents and report their IDs, topology, attached
-   resources, and any prerequisites still requiring operator setup.
+1. Read `references/agent-design.md` for every create or redesign request.
+2. Convert the goal into an operating contract: outcome, inputs, allowed scope,
+   workflow, tool policy, output contract, completion test, failure behavior,
+   approvals, and explicit prohibitions.
+3. Default to one agent. Read `references/multi-agent.md` before recommending
+   specialists or an orchestrator. Split only at boundaries that have distinct
+   expertise, tools, permissions, context, or independently verifiable output.
+4. Read `references/mcp.md` before registering, attaching, or prompting for an
+   integration or platform MCP tool.
+5. Select the least-capable connected runtime, model, tools, MCP servers,
+   skills, rules, and vault keys that can satisfy the contract. Do not attach a
+   tool merely because it is available.
+6. Draft the complete instructions and acceptance cases before writing the
+   blueprint. Show the user the proposed topology, permissions, side effects,
+   and unresolved prerequisites.
 
-## Back up an LACP instance
+## Create and validate
 
-1. Explain that this is a portable API backup, not a PostgreSQL or host backup.
-   It contains agent prompts, memory, and files and is sensitive even though
-   credential values are excluded.
-2. Choose a new output path outside a public repository.
-3. Run:
+1. Build a JSON blueprint from `references/lacp-api.md`. Use symbolic `ref`
+   values for sub-agent relationships and real inventory IDs everywhere else.
+2. Run `python3 scripts/lacp_client.py create --profile <profile> --spec <file>`
+   without `--apply`.
+3. Review the normalized result against the quality gate in
+   `references/agent-design.md` and, for a parent/child design, the contracts in
+   `references/multi-agent.md`. Correct the blueprint rather than dismissing a
+   mismatch as a future prompt problem.
+4. Ask for explicit confirmation, then rerun with `--apply`. The helper creates
+   every agent paused, resolves real child IDs, and patches parents afterward.
+5. Run safe acceptance cases while paused or in an isolated test context. Test
+   tool discovery, read-only work, denied/out-of-scope requests, missing input,
+   an upstream failure, and approval behavior before enabling delivery tools or
+   schedules.
+6. Retrieve the parent and every child. Report IDs, topology, attachments,
+   acceptance results, limitations, and prerequisites. A successful parent run
+   is not evidence that each child or MCP tool succeeded.
 
-   `python3 scripts/lacp_client.py backup --profile <source> --output <path>`
+## Register and attach MCP servers
 
-4. Report counts, warnings, the archive checksum, and every prerequisite whose
-   secret must be re-entered on restore. Never display archive contents unless
-   the user explicitly requests a particular non-secret field.
+Follow `references/mcp.md` in order: define, discover, restrict, register,
+connect credentials in LACP, verify the saved server, attach it, teach the agent
+when to use it, and run an end-to-end acceptance case.
 
-The backup includes REST-exportable agents, skills, rules, routines, agent
-memory and files, sanitized MCP definitions, model/provider/runtime metadata,
-vault-key names, and the MCP proxy setting. It excludes API keys, provider and
-runtime secrets, vault values, OAuth tokens, session/run history, approvals,
-inbox items, and server encryption keys.
+- Discover without saving:
+  `python3 scripts/lacp_client.py mcp-discover --profile <profile> --spec <file>`
+- Preview registration:
+  `python3 scripts/lacp_client.py mcp-add --profile <profile> --spec <file>`
+- Register after confirmation: add `--apply`.
+- Verify a saved server:
+  `python3 scripts/lacp_client.py mcp-tools --profile <profile> --server-id <id> --user-id <owner>`
+- Attach registered integrations through blueprint `mcp_server_ids` only.
+- Attach LACP platform tools through `platform_mcp_ids` only. Sub-agent links
+  automatically enable the platform list/run tools.
 
-## Restore a backup
+The helper refuses credential-bearing MCP definition fields and prompts hidden
+for temporary discovery variables. Configure instance, per-user, or OAuth
+credentials through the target LACP credential flow; never save them in an MCP
+JSON spec.
 
-1. Configure a separate target profile and verify that it identifies the
-   intended LACP instance.
-2. Run a dry-run first:
+## Back up and restore
 
-   `python3 scripts/lacp_client.py restore --profile <target> --input <path>`
+1. Explain that this is a sensitive, portable API backup, not a PostgreSQL or
+   host backup. Choose a new output path outside a public repository.
+2. Back up with
+   `python3 scripts/lacp_client.py backup --profile <source> --output <path>`.
+3. Report counts, checksum, warnings, and secrets that must be re-entered.
+4. Configure and verify a separate target profile.
+5. Dry-run with
+   `python3 scripts/lacp_client.py restore --profile <target> --input <path>`.
+6. Review prerequisites and conflicts, obtain explicit confirmation, then add
+   `--apply`. Keep agents and routines paused unless the user explicitly asks
+   for `--restore-status`.
+7. Use `--conflict skip` only to preserve matching target objects and
+   `--conflict rename` only when duplicates are acceptable. Never delete to
+   resolve a conflict.
+8. Use `--restore-instance-settings` only after verifying the source MCP proxy
+   URL is correct for the target.
 
-3. Review missing secrets, runtime/provider prerequisites, name conflicts, and
-   counts with the user. Default conflict policy is `fail`.
-4. Ask for explicit confirmation immediately before applying the restore.
-5. Apply with `--apply`. Use `--conflict skip` only when the user wants to keep
-   matching target objects. Use `--conflict rename` only when duplicates are
-   acceptable.
-6. Keep restored agents and routines paused by default. Use `--restore-status`
-   only when the user explicitly wants source activation state restored.
-7. Do not restore the source MCP proxy URL by default because it is
-   instance-specific. Use `--restore-instance-settings` only after verifying
-   the value is correct for the target.
-8. Report old-to-new ID mappings, restored counts, skipped objects, warnings,
-   and secrets or connections that still require manual configuration.
+The archive includes REST-exportable agents, skills, rules, routines, memory,
+files, sanitized MCP definitions, metadata, vault-key names, and the MCP proxy
+setting. It excludes credentials, OAuth tokens, provider/runtime secrets,
+vault values, sessions, run history, approvals, inbox items, and encryption
+keys. Read `references/lacp-api.md` for the complete boundary.
 
-## Safety rules
+## Non-negotiable safety
 
-- Require confirmation before `create --apply` or `restore --apply`.
-- Never overwrite a backup unless the user explicitly approves `--force`.
-- Never use deletion to resolve a restore conflict.
-- Never claim a portable backup contains credentials or operational history.
-- Preserve `mcp_server_ids` as the source for MCP attachments. Let the helper
-  strip stale `mcp_toolset` entries and rebuild them from resolved server IDs.
-- Create leaf agents before attaching them to orchestrators.
-- Keep external-delivery tools and active schedules disabled until their
-  credentials and acceptance tests are complete.
-
-Read `references/lacp-api.md` when constructing a blueprint or interpreting a
-backup/restore report.
+- Require confirmation before `create --apply`, `mcp-add --apply`, or
+  `restore --apply`.
+- Never overwrite a backup without explicit approval for `--force`.
+- Preserve `mcp_server_ids` as the source of truth for integration attachment;
+  never author or retain stale `mcp_toolset` entries.
+- Use `platform_mcp_ids` only for LACP's built-in platform tools.
+- Keep agents, routines, external-delivery tools, and schedules paused until
+  credentials and acceptance tests pass.
+- Require a human approval boundary for sends, publishes, purchases, deletes,
+  permission changes, or other irreversible external effects.
+- Never claim success from configuration, HTTP status, or parent completion
+  alone; verify the observable result and every relevant child/tool outcome.
