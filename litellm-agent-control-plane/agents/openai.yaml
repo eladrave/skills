@@ -1,0 +1,4 @@
+interface:
+  display_name: "LACP Agent Builder"
+  short_description: "Create, back up, and restore LACP agents"
+  default_prompt: "Use $lacp-agent-builder to design and create agents on my LACP instance."
