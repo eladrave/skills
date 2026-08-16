@@ -1,168 +1,187 @@
 # SharedKnowledgeLibrary
 
-This package defines a cross-agent shared knowledge architecture using Google Drive as the canonical storage layer while preserving ChatGPT native Library as an ingress and convenience surface.
+A single canonical Google Drive tree for durable general knowledge shared across ChatGPT, Codex, Codex CLI, and other authorized agents.
 
-## Status
+## Canonical storage
 
-**Source package only. Not installed. No scheduled task is created by these files.**
+Google Drive:
 
-Installation, Drive initialization, bootstrap migration, and scheduling are separate actions and should occur only after explicit user approval.
+`ChatGPT Library`
 
-## Canonical general library
+Folder ID:
 
-- Google Drive folder: `ChatGPT Library`
-- Folder ID: `1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
-- URL: `https://drive.google.com/drive/folders/1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
+`1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
 
-## Package files
+As of 2026-08-16, the existing folders below have been moved under that root without changing their Drive IDs:
+
+- `Medical records` → `1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3`
+- `Cynapsa` → `1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq`
+
+They are now normal canonical subtrees of SharedKnowledgeLibrary.
+
+## Separate operational library
+
+Google Drive `Codex` remains outside this tree.
+
+Its purpose is credentials, infrastructure, deployment and recovery runbooks, private connection details, and other operational agent memory.
+
+Do not merge or mirror `Codex` into SharedKnowledgeLibrary.
+
+## Architecture
+
+```text
+Google Drive
+│
+├── ChatGPT Library/                 CANONICAL GENERAL KNOWLEDGE
+│   ├── Medical records/
+│   ├── Cynapsa/
+│   ├── Memories/
+│   ├── Personal/
+│   ├── Projects/
+│   ├── ...
+│   ├── _LIBRARY_POLICY.md
+│   └── _sync/
+│       └── _shared_library_manifest.json
+│
+└── Codex/                           CANONICAL OPERATIONAL KNOWLEDGE
+    ├── credentials
+    ├── infrastructure
+    ├── deployment runbooks
+    └── operational instructions
+
+ChatGPT native Library
+    = immediate-access surface + mirror + ingress
+    ≠ canonical authority
+```
+
+## Why this is not a normal two-way sync
+
+Native ChatGPT Library automatically receives uploads and many ChatGPT-generated files, so it needs to participate in the architecture.
+
+However, using normal last-writer-wins bidirectional synchronization would create stale-copy and deletion hazards.
+
+The unified reconciler therefore uses asymmetric ownership:
+
+### New native Library item
+
+```text
+new upload/generated file
+        ↓
+native ChatGPT Library
+        ↓
+copy/adopt into Drive
+        ↓
+Drive becomes canonical
+```
+
+### Existing mapped item
+
+```text
+Google Drive
+   ↓ authoritative updates
+native Library mirror
+```
+
+Once mapped, a native Library edit, move, rename, or deletion does not automatically mutate Drive.
+
+## ChatGPT Web
+
+ChatGPT Web may naturally surface native Library results first. That is fine for immediate use.
+
+The skill explicitly separates retrieval from ownership:
+
+- a current-turn upload can be used immediately;
+- a mapped Drive item is the durable authority;
+- if mapped native and Drive copies disagree, Drive wins;
+- `save this to my Library` means canonical Drive when the skill is active, unless the user explicitly asks for native/built-in ChatGPT Library.
+
+## Medical Records and Cynapsa
+
+The previous architecture had two independent Drive→Library jobs:
+
+- `Medical Records Sync`
+- `Sync Cynapsa Drive`
+
+Those jobs may continue running temporarily because their source folder IDs did not change when the folders were moved.
+
+The unified bootstrap should import their existing `_drive_sync_manifest.json` mappings so Library identities and version history can be preserved.
+
+Only after the unified reconciler has completed a successful validation run should the old tasks be disabled.
+
+Do not delete the old tasks immediately. Keep them disabled for rollback until the new process is proven stable.
+
+## Files in this package
 
 ### `SKILL.md`
 
-The agent-facing SharedKnowledgeLibrary skill.
-
-It defines:
-
-- The canonical Drive root.
-- ChatGPT native Library semantics.
-- ChatGPT Web behavior when native Library retrieval appears first.
-- Read/write ownership and conflict rules.
-- Medical Records and Cynapsa exclusions.
-- Codex operational knowledge separation.
-- Manifest semantics.
-- No-MCP transport assumption.
+Cross-agent behavior for reading, writing, classification, ChatGPT Web behavior, native Library ingress, and canonical ownership.
 
 ### `_LIBRARY_POLICY.md`
 
-Template for the live governance file that should eventually be placed at the root of the Google Drive `ChatGPT Library` folder.
-
-Once deployed to Drive, the Drive copy becomes the authoritative live policy. The repository copy remains the reviewed bootstrap/source template.
-
-### `_EXTERNAL_SOURCES.md`
-
-Template for the live registry of separately canonical knowledge domains.
-
-Currently defines:
-
-- Medical records.
-- Cynapsa.
-- Codex operational knowledge.
-- ChatGPT Library's mounted `/Google Drive` exclusion.
+Live policy intended to be placed at the root of Google Drive `ChatGPT Library` before activation.
 
 ### `bootstrap_migration.md`
 
-One-time migration procedure for existing ChatGPT native Library content.
+One-time migration/adoption procedure. It:
 
-It deliberately separates migration from ongoing synchronization because the existing native Library already contains mixed content, including externally synced trees and historical operational-looking files.
-
-The bootstrap:
-
-- Fully inventories native Library.
-- Excludes `/Medical records`, `/Cynapsa`, and `/Google Drive` recursively.
-- Detects/skips operational candidates that may belong to Codex.
-- Migrates eligible general knowledge to Drive.
-- Deduplicates against existing Drive content.
-- Creates the Library-to-Drive manifest.
-- Performs no deletions.
+- adopts existing Medical Records and Cynapsa mappings;
+- inventories the rest of native ChatGPT Library;
+- excludes the native `/Google Drive` mount;
+- ingests general untracked content;
+- holds strongly operational/credential-bearing material for classification;
+- performs no destructive cleanup during bootstrap.
 
 ### `scheduledprompt.md`
 
-Recurring incremental native Library -> canonical Drive ingestion prompt.
+Ongoing unified reconciliation specification.
 
-Recommended cadence: hourly.
+### `manifest.example.json`
 
-It is intentionally **not** a bidirectional mirror.
+Reference schema for unified identity and conflict tracking.
 
-Key behavior:
+## No MCP requirement
 
-- New/changed eligible Library content may flow to Drive.
-- After ingestion, Drive is canonical.
-- Drive changes do not flow back to native Library.
-- Native Library deletion does not delete Drive.
-- A deleted Drive destination is not silently recreated from stale native Library.
-- Concurrent changes become conflicts instead of last-writer-wins overwrites.
+This design does not require its own MCP server.
 
-## Existing synchronization jobs
+The current environment supplies Drive transport:
 
-The following existing scheduled jobs are intentionally outside this package and must remain unchanged:
+- ChatGPT can use its connected Google Drive app;
+- Codex/Codex CLI can use whatever authorized Drive integration is available;
+- another agent is responsible for its own authorized Drive access.
 
-### `Medical Records Sync`
+The skill defines the storage contract, not the transport.
 
-```text
-Google Drive / Medical records
-        ->
-ChatGPT native Library /Medical records
-```
+## Recommended cutover sequence
 
-Google Drive remains the sole source of truth.
+1. **Already completed:** move `Medical records` and `Cynapsa` under Google Drive `ChatGPT Library` while preserving their IDs.
+2. Review the revised files in this GitHub folder.
+3. Copy `_LIBRARY_POLICY.md` into the canonical Drive root.
+4. Install `SharedKnowledgeLibrary` only after explicit user approval.
+5. Run `bootstrap_migration.md` in no-deletion mode.
+6. Review pending classifications and conflicts.
+7. Run one full unified reconciliation in validation/no-deletion mode.
+8. Verify existing Medical and Cynapsa Library IDs/mappings were adopted correctly.
+9. Create the recurring unified reconciliation task at the desired cadence.
+10. Disable `Medical Records Sync` and `Sync Cynapsa Drive` only after the unified task is validated.
+11. Keep the disabled old tasks temporarily as rollback.
+12. Enable canonical Drive→Library deletion reconciliation only after clean full scans are proven reliable.
 
-SharedKnowledgeLibrary never syncs `/Medical records` back to Drive.
+## Current status
 
-### `Sync Cynapsa Drive`
+Repository source: revised for the single-tree model.
 
-```text
-Google Drive / Cynapsa
-        ->
-ChatGPT native Library /Cynapsa
-```
+Drive structure: Medical Records and Cynapsa have been moved under `ChatGPT Library` with their stable IDs preserved.
 
-Google Drive remains the sole source of truth.
+Not yet done:
 
-SharedKnowledgeLibrary never syncs `/Cynapsa` back to Drive.
+- `_LIBRARY_POLICY.md` has not yet been installed into the Drive root by this package change.
+- `SharedKnowledgeLibrary` has not been installed as a skill.
+- bootstrap migration has not been run.
+- unified scheduled reconciliation has not been created.
+- the two legacy sync tasks have not been disabled.
 
-## Codex boundary
-
-`Google Drive / Codex` remains a different use case.
-
-It is operational shared memory for agents and is governed by `CodexAsKnowledgeReadWrite`.
-
-SharedKnowledgeLibrary does not duplicate:
-
-- Credentials.
-- Private endpoints.
-- Deployment runbooks.
-- Infrastructure topology.
-- SSH/database/MCP connection instructions.
-- Runtime/recovery procedures.
-
-A document is routed based on what the knowledge is for, not which agent happened to create it.
-
-## Why no MCP is required
-
-This architecture defines storage ownership, not transport.
-
-ChatGPT, Codex, Codex CLI, or another agent may use whatever authorized Google Drive integration is available in that environment.
-
-The SharedKnowledgeLibrary skill does not require the user to provision another OAuth application or MCP server merely to access the same Drive folder.
-
-## ChatGPT Web design
-
-ChatGPT Web can naturally surface native Library files because uploads and generated files are retained there.
-
-The architecture does not fight that product behavior.
-
-Instead:
-
-- Current-turn files may be used directly.
-- Native Library is valid discovery/ingress.
-- Older general knowledge resolves to canonical Drive when freshness or modification matters.
-- New Library-only general artifacts are `pending ingress` until copied to Drive.
-- Medical Records and Cynapsa Library trees remain intentional read mirrors.
-- `/Google Drive` is never re-exported to Drive.
-
-This prevents retrieval convenience from becoming an accidental source-of-truth policy.
-
-## Recommended deployment sequence after review
-
-Do not perform these steps until explicitly approved.
-
-1. Place reviewed `_LIBRARY_POLICY.md` in the Google Drive `ChatGPT Library` root.
-2. Place reviewed `_EXTERNAL_SOURCES.md` in that same root.
-3. Install/enable the `SharedKnowledgeLibrary` skill in the desired agent environments.
-4. Run `bootstrap_migration.md` once to migrate existing eligible native Library content and create `_shared_knowledge_library_manifest.json`.
-5. Review bootstrap conflicts and Codex-routing candidates.
-6. Create the recurring task using `scheduledprompt.md`.
-7. Leave the existing Medical Records and Cynapsa tasks untouched.
+Those are intentionally separate actions.
 
 ## Governing principle
 
-**One logical knowledge item, one canonical owner, many authorized consumers.**
+**One canonical general Drive tree, one separate Codex operational tree, and native ChatGPT Library as cache, mirror, and ingress.**
