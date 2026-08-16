@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "canonical_root": {
+    "provider": "google_drive",
+    "folder_id": "1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb",
+    "folder_name": "ChatGPT Library"
+  },
+  "cutover_at": "2026-08-16T00:00:00Z",
+  "hard_exclusions": [
+    "/Google Drive/**",
+    "/Medical records/_drive_sync_manifest.json",
+    "/Cynapsa/_drive_sync_manifest.json"
+  ],
+  "legacy_native_subtrees": [
+    {
+      "path": "/Medical records",
+      "canonical_drive_folder_id": "1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3",
+      "rule": "items present at or before cutover_at are legacy Drive-backed copies and must not be re-ingested"
+    },
+    {
+      "path": "/Cynapsa",
+      "canonical_drive_folder_id": "1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq",
+      "rule": "items present at or before cutover_at are legacy Drive-backed copies and must not be re-ingested"
+    }
+  ],
+  "items": [
+    {
+      "native_library_file_id": "file_example",
+      "native_library_path": "/Example/report.pdf",
+      "native_library_version": 1,
+      "drive_file_id": "drive_example",
+      "drive_relative_path": "Example/report.pdf",
+      "origin": "chatgpt-generated",
+      "status": "managed",
+      "last_verified_at": "2026-08-16T00:00:00Z"
+    }
+  ],
+  "pending_classification": [],
+  "failures": [],
+  "last_run": null
+}
