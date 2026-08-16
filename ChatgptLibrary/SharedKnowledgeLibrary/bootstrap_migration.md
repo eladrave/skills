@@ -1,297 +1,291 @@
 # SharedKnowledgeLibrary Bootstrap Migration
 
-This is a **one-time migration procedure**, not a recurring scheduled task.
+This is a one-time migration/adoption procedure for establishing the unified SharedKnowledgeLibrary.
 
-Its purpose is to migrate existing general-purpose content from ChatGPT native Library into the canonical Google Drive `ChatGPT Library` folder without duplicating the existing Medical Records, Cynapsa, Google Drive mount, or Codex operational knowledge domains.
+Do not run this procedure merely because the source exists in GitHub. Run it only after explicit user authorization.
 
-## Canonical destination
+## Goal
 
-- Google Drive folder: `ChatGPT Library`
-- Folder ID: `1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
-- URL: `https://drive.google.com/drive/folders/1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
+Establish one canonical Google Drive tree:
 
-## Existing domains that must remain unchanged
+`ChatGPT Library` folder ID `1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
 
-Do not modify the existing scheduled tasks:
+while preserving existing native ChatGPT Library identities wherever possible and avoiding duplicate copies.
 
-- `Medical Records Sync`
-- `Sync Cynapsa Drive`
+The existing Drive folders `Medical records` and `Cynapsa` have already been moved under the canonical root with their IDs preserved.
 
-Do not change their directionality.
+## Safety mode
 
-Their source folders remain authoritative and their native Library mirrors remain one-way Drive -> Library mirrors.
+Bootstrap is **non-destructive**.
 
-Do not modify or migrate the Google Drive `Codex` operational knowledge folder.
+During bootstrap:
 
-## Required governance
+- do not delete anything from Google Drive;
+- do not permanently delete anything from native ChatGPT Library;
+- do not remove existing Medical/Cynapsa mirrors;
+- do not disable old scheduled jobs;
+- do not resolve ambiguous operational-vs-general classification by guessing;
+- do not use last-writer-wins.
 
-Before migration, read the bundled/live versions of:
+All deletion reconciliation remains disabled until after a later validated cutover.
 
-- `_LIBRARY_POLICY.md`
-- `_EXTERNAL_SOURCES.md`
+## Sources
 
-If live copies already exist in the canonical Drive root, use the live Drive copies as authoritative policy.
+### Canonical Drive root
 
-If they do not yet exist, this bootstrap may create them in the canonical Drive root from the reviewed bundled copies before migrating user content.
+- `ChatGPT Library`
+- ID `1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`
 
-Do not overwrite different existing policy files without explicit authorization.
+### Native ChatGPT Library
 
-## Source inventory
+Inventory the entire persistent Library recursively.
 
-Inventory ChatGPT native Library recursively.
+### Existing legacy mappings
 
-The source inventory must be complete before making migration decisions.
+Locate and read, when present:
 
-Record for every native Library item when available:
+- `/Medical records/_drive_sync_manifest.json`
+- `/Cynapsa/_drive_sync_manifest.json`
 
-- Stable Library file/folder ID.
-- Full Library path.
-- File/folder type.
-- MIME type.
-- Size.
-- Created time.
-- Modified time.
-- Version ID.
-- Whether model-generated when available.
+Treat these files as synchronization metadata only.
 
-Do not infer folder membership from search snippets alone.
+They contain valuable mapping information between stable Drive IDs and existing native Library items.
 
-## Hard recursive exclusions
+## Hard native-Library exclusion
 
-Never migrate anything under:
+Never ingest the native Library `/Google Drive` mounted/connected source back into Drive.
 
-```text
-/Medical records/**
-/Cynapsa/**
-/Google Drive/**
-```
+Exclude:
 
-The exclusions include their manifests and all descendants.
+`/Google Drive/**`
 
-Do not read excluded file contents merely to decide whether to migrate them. Their path already defines their ownership boundary.
+This is a connector-backed view of Drive and ingesting it would create a loop.
 
-## Additional semantic exclusion: Codex operational knowledge
+Also exclude protected/internal Library artifacts that cannot safely be copied or mutated.
 
-Outside the hard exclusions, inspect enough metadata/content to identify files whose primary purpose is environment-specific operational knowledge.
+## Phase 1: verify canonical Drive structure
 
-Examples include files containing or primarily documenting:
+1. Fetch metadata for the canonical Drive root.
+2. Confirm it is folder ID `1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb`.
+3. Confirm `Medical records` is a direct child with ID `1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3`.
+4. Confirm `Cynapsa` is a direct child with ID `1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq`.
+5. Confirm the separate `Codex` root is not a descendant of SharedKnowledgeLibrary.
+6. Fail closed if any of these ownership boundaries are not as expected.
 
-- Passwords, API keys, tokens, private keys, credential-bearing URLs.
-- Private MCP connection information.
-- SSH host access or private host connection procedures.
-- Production deployment/runbook procedures.
-- Container or service operation details.
-- Private database access details.
-- Infrastructure/network/cloud operational configuration.
-- Runtime recovery or incident procedures.
+## Phase 2: establish control files
 
-Do **not** automatically migrate obvious operational candidates into SharedKnowledgeLibrary.
+Ensure the canonical Drive root contains the approved `_LIBRARY_POLICY.md`.
 
-Do **not** automatically copy them into the Google Drive `Codex` folder either.
+Create a reserved control folder if needed:
 
-For each operational candidate:
+`_sync/`
 
-1. Record its Library path and non-secret classification reason.
-2. If permitted and useful, check whether an existing Codex canonical file already owns that knowledge.
-3. Mark it `skipped_operational_candidate`.
-4. Report unique-looking candidates for deliberate later reconciliation.
-5. Never reveal secret values in the migration report.
+Create the unified manifest:
 
-If classification is genuinely ambiguous, skip the item and report it rather than creating a possible second source of truth.
+`_sync/_shared_library_manifest.json`
 
-## General migration candidates
+Initialize it from the approved schema in `manifest.example.json`.
 
-Migrate items that are durable general-purpose knowledge and do not belong to an external canonical domain.
+Control files are not normal documentary content and should not be mirrored into native ChatGPT Library.
 
-Examples include:
+## Phase 3: inventory native Library
 
-- Personal reference documents.
-- Research.
-- Writing and manuscripts.
-- General business documents.
-- Project documents without a different canonical owner.
-- User uploads intended for long-term reuse.
-- ChatGPT-generated reports, spreadsheets, documents, images, and other artifacts worth retaining.
-- General technical designs that are not private environment-specific operational runbooks.
+Recursively enumerate the entire native ChatGPT Library with pagination until complete.
 
-Do not migrate obviously disposable temporary artifacts merely because they exist if their content is clearly transient and has no durable reuse value. When uncertain about value, preserve rather than delete, but migration may be skipped and reported.
+Record for every item:
 
-## Preserve logical structure
+- native Library file/folder ID;
+- path;
+- version when available;
+- size;
+- MIME/file type;
+- generated/uploaded metadata when available;
+- whether it is under `/Google Drive`;
+- whether it is under `/Medical records`;
+- whether it is under `/Cynapsa`;
+- whether it appears already managed by a legacy manifest;
+- whether it strongly appears operational/credential-bearing.
 
-For migrated content, preserve the native Library relative folder structure when meaningful.
+Do not assume root-level files are all general knowledge.
 
-Root-level Library files may remain root-level under the Drive `ChatGPT Library` folder unless a clear existing folder ownership structure already applies.
+## Phase 4: adopt Medical Records mappings
 
-Do not invent a large taxonomy during bootstrap merely to make the folder look organized.
+If `/Medical records/_drive_sync_manifest.json` exists:
 
-Preserve current names unless a collision requires review.
+1. Read the complete manifest.
+2. For each mapping, verify the Drive ID is still under canonical `ChatGPT Library/Medical records`.
+3. Verify the native Library ID still exists when possible.
+4. Verify current paths and versions.
+5. Add the mapping to the unified manifest without creating a new Drive or Library copy.
+6. Record origin as `legacy-medical-sync-adopted` or equivalent.
+7. Record current synchronized baseline metadata for future conflict detection.
+8. Do not treat the legacy manifest itself as medical evidence.
 
-## File bytes and representations
+If an entry cannot be verified, mark it unresolved rather than manufacturing a replacement.
 
-For stored files, preserve original bytes and filename when possible.
+## Phase 5: adopt Cynapsa mappings
 
-For Library artifacts that require materialization, obtain the original/best raw-file representation before upload.
+Perform the same adoption using `/Cynapsa/_drive_sync_manifest.json`.
 
-Do not silently transform PDFs to Docs, spreadsheets to Sheets, or other stored formats during migration unless the user has explicitly requested conversion.
+For each mapping:
 
-For native/generated artifacts where only one supported representation exists, record the chosen representation in the manifest.
+1. verify the Drive item is under canonical `ChatGPT Library/Cynapsa`;
+2. verify the Library identity when possible;
+3. preserve existing Library identity and version history;
+4. add the mapping to the unified manifest;
+5. do not upload a duplicate merely because the Drive parent moved.
 
-## Existing destination inventory
+Folder moves in Drive do not change the stable file/folder ID, so ancestry changes alone are not evidence that an item is new.
 
-Before uploading candidates, recursively inventory the canonical Drive `ChatGPT Library` root.
+## Phase 6: inventory canonical Drive
 
-The folder may already contain policy files or user content.
+Recursively enumerate the complete canonical Drive root.
 
-Do not assume it is empty simply because it was empty at design time.
+Exclude control paths from documentary mirroring:
 
-Record stable Drive IDs, paths, MIME types, sizes, modified times, checksums/revisions when available.
+- `/_sync/**`
+- `/_LIBRARY_POLICY.md`
 
-## Duplicate and collision handling
+For each canonical content item, determine whether it already has a mapping through:
 
-### Exact or strong content match
+1. adopted legacy manifest entries;
+2. exact Drive ID mapping;
+3. verified equivalent native Library item.
 
-If a migration candidate matches an existing Drive file by strong evidence such as:
+When a canonical Drive item already has an equivalent native Library item, adopt that identity instead of creating another mirror.
 
-- Same content hash/checksum.
-- Same raw bytes.
-- Same stable artifact with verified equivalent content.
+## Phase 7: classify remaining native Library items
 
-adopt the existing Drive file as the canonical destination and record the Library-to-Drive mapping.
+Consider native Library items that are:
 
-Do not upload another copy.
+- outside `/Google Drive`;
+- not already mapped/adopted;
+- not protected internal artifacts.
 
-### Same path/name, different content
+Classify each into one of:
 
-Do not overwrite an existing Drive file merely because a native Library item has the same path or name.
+### A. General SharedKnowledgeLibrary ingress
 
-Treat the Drive file as canonical existing content.
+Examples:
 
-Mark the Library candidate as a collision/conflict and report it.
+- personal documents;
+- research;
+- generated reports;
+- memoir/writing;
+- project knowledge;
+- general company/business files;
+- medical material;
+- Cynapsa general knowledge.
 
-Do not generate `-copy`, `-new`, or similar filenames automatically unless the user explicitly decides both are separate artifacts.
+### B. Strongly operational or credential-bearing
 
-### Same content, different path
+Examples:
 
-If the same file is already in Drive at a different logical location, do not duplicate it automatically. Prefer the existing canonical Drive identity and report the path discrepancy if it matters.
+- credential files;
+- live tokens/passwords/API keys;
+- MCP connection credential references;
+- SSH/production connection instructions;
+- deployment/rollback runbooks;
+- private infrastructure operating procedures.
 
-## Migration write order
+Do not automatically copy category B into SharedKnowledgeLibrary.
 
-Perform safe writes in this order:
+Mark `pending-classification` and report it. Do not silently copy it to `Codex` either unless that write is independently authorized.
 
-1. Verify Drive access and canonical destination folder ID.
-2. Read/establish policy files.
-3. Complete native Library inventory.
-4. Complete Drive destination inventory.
-5. Classify exclusions and operational candidates.
-6. Create required destination folders for approved general candidates.
-7. Upload/adopt files one by one or in safe bounded batches.
-8. Verify every created/adopted file.
-9. Build/update the synchronization manifest only after verified file operations.
-10. Re-read the manifest and spot-check representative files.
+### C. Temporary/no-durable-value artifact
 
-Do not delete anything from native Library or Drive during bootstrap.
+Do not automatically discard it. Keep it in native Library and mark it skipped unless the user has established a retention rule.
 
-## Manifest
+When uncertain between A and B, prefer pending classification over duplication.
 
-Create or update:
+## Phase 8: ingest verified general native items
 
-`_shared_knowledge_library_manifest.json`
+For each category-A item:
 
-in the canonical Drive root.
+1. Preserve its relative native Library path where reasonable.
+2. Search the canonical Drive destination for an existing logical/equivalent item.
+3. Use stable identifiers and content/metadata checks, not filename alone.
+4. If an equivalent Drive item exists, adopt it into the unified manifest.
+5. Otherwise materialize/download the native Library bytes using supported tools.
+6. Upload to the canonical Drive path.
+7. Preserve the filename and MIME type when practical.
+8. Verify the Drive item exists and has plausible byte size/type.
+9. Record both identities and the synchronized baseline.
+10. Mark origin as `chatgpt-library-upload`, `chatgpt-generated`, or another supported origin.
 
-Recommended top-level structure:
+Do not delete the native source after successful ingress. It becomes the mirror/cache identity.
 
-```json
-{
-  "schema_version": 1,
-  "canonical_drive_root_id": "1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb",
-  "last_bootstrap_at": "<timestamp>",
-  "items": {}
-}
-```
+## Phase 9: create/adopt mirrors for Drive-only items
 
-Key each tracked source item by stable native Library file ID when possible.
+For canonical Drive content that has no native Library mapping:
 
-Recommended item fields:
+1. Create or adopt the corresponding Library folder structure.
+2. For stored non-native Drive files, preserve original bytes and filename.
+3. For Google-native files use the configured mirror representation:
+   - Docs → PDF
+   - Sheets → XLSX
+   - Slides → PDF
+4. Verify the resulting Library file.
+5. Record mapping and baseline.
 
-```json
-{
-  "source_library_file_id": "<stable id>",
-  "source_library_path": "/path/file.ext",
-  "source_version_id": "<version>",
-  "source_created_at": "<timestamp>",
-  "source_modified_at": "<timestamp>",
-  "source_mime_type": "<mime>",
-  "source_size": 123,
-  "source_fingerprint": "<checksum if available>",
-  "source_model_generated": false,
-  "drive_file_id": "<stable Drive id>",
-  "drive_path": "/path/file.ext",
-  "drive_mime_type": "<mime>",
-  "drive_modified_at_at_sync": "<timestamp>",
-  "drive_fingerprint_at_sync": "<checksum/revision if available>",
-  "last_synced_source_version": "<version>",
-  "state": "synced",
-  "last_synced_at": "<timestamp>"
-}
-```
+If creation cannot be verified, record failure and continue non-destructively.
 
-For excluded/skipped items, the manifest may record only non-sensitive routing metadata and a state such as:
+## Phase 10: conflict detection
 
-- `excluded_external_source`
-- `excluded_drive_mount`
-- `skipped_operational_candidate`
-- `conflict`
+For any item where an old mapping exists but Drive and Library both differ from the last recorded baseline:
 
-Do not store secret contents in the manifest.
+- do not overwrite either side;
+- mark conflict;
+- preserve current data;
+- report the exact logical item/path without exposing sensitive content.
 
-## Drive becomes canonical after ingestion
+Do not resolve by comparing modification timestamps alone.
 
-For every successfully ingested general artifact:
+## Phase 11: write and verify unified manifest
 
-- Google Drive becomes the canonical copy.
-- Native Library remains an ingress/cache copy.
-- Future native Library deletion does not delete Drive.
-- Future Drive edits do not need to be mirrored back to native Library.
-- Future sync logic must not overwrite a changed Drive file from a stale native Library version.
+The manifest must contain all verified managed mappings plus pending/conflict states.
 
-## Fail-closed conditions
+Write it only after all intended non-destructive mutations are complete.
 
-Do not continue with destructive or overwriting behavior if:
+Re-read it and verify:
 
-- Native Library inventory is incomplete or pagination is unresolved.
-- Drive destination inventory is incomplete or ambiguous.
-- A source file cannot be materialized/read reliably.
-- A destination upload cannot be verified.
-- Path identity is ambiguous.
-- A possible external-domain ownership conflict is unresolved.
-- A file may contain unique Codex operational knowledge and classification is uncertain.
-- Manifest state cannot be safely reconciled.
+- valid JSON;
+- correct root ID;
+- unique Drive IDs among managed mappings unless a documented reason exists;
+- unique native Library IDs among managed mappings;
+- no `/Google Drive` mount items were ingested;
+- adopted Medical/Cynapsa mappings retained their existing identities where possible.
 
-Bootstrap is non-destructive, so individual failed files may be reported while unaffected files continue if doing so cannot create incorrect ownership.
+## Bootstrap report
 
-## Migration report
+Report:
 
-Report counts for:
+- canonical Drive files/folders discovered;
+- native Library files/folders discovered;
+- Medical mappings adopted;
+- Cynapsa mappings adopted;
+- general native items ingested;
+- existing Drive equivalents adopted;
+- Drive-only items mirrored;
+- operational-looking items pending classification;
+- conflicts;
+- failures;
+- skipped/protected items;
+- deletion status: **disabled**.
 
-- Native Library files discovered.
-- Hard-excluded Medical records items.
-- Hard-excluded Cynapsa items.
-- Hard-excluded Google Drive mount items.
-- General migration candidates.
-- Successfully uploaded files.
-- Existing Drive files adopted without duplication.
-- Unchanged/already mapped items.
-- Operational candidates skipped.
-- Conflicts/collisions.
-- Failures.
+List pending classifications by filename/path, but never expose secret values.
 
-List operational candidates and conflicts by safe filename/path only. Do not include credential values or secret content.
+## Success criteria
 
-Explicitly confirm:
+Bootstrap is successful only if:
 
-- No existing Medical Records or Cynapsa sync task was modified.
-- No Medical Records or Cynapsa content was synced back to Drive.
-- No Codex operational file was automatically duplicated into SharedKnowledgeLibrary.
-- No files were deleted from native Library.
-- No canonical Drive files were deleted.
+1. canonical root and domain boundaries are verified;
+2. Medical and Cynapsa legacy mappings are adopted as far as verifiable;
+3. no duplicate Drive copies were created for moved folders/items;
+4. general ingress items were verified after upload/adoption;
+5. Drive-only mirrors were verified when created;
+6. manifest was written and re-read successfully;
+7. no destructive reconciliation occurred;
+8. all unresolved conflicts/classification issues are reported.
+
+After a successful bootstrap, perform a separate full unified reconciliation in no-deletion validation mode before disabling the legacy jobs.
