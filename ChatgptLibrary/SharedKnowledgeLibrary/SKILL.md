@@ -1,11 +1,13 @@
 ---
 name: shared-knowledge-library
-description: 'Use the Google Drive folder "ChatGPT Library" as the canonical shared general-knowledge library for ChatGPT, Codex, Codex CLI, and other authorized agents. Read and write durable general knowledge there, including its Medical records and Cynapsa subtrees. Treat native ChatGPT Library as an immediate-access cache, mirror, and ingress surface rather than the durable source of truth. New untracked native-Library files may be ingested into Drive, but once mapped, the Drive item is canonical. Keep the separate Google Drive "Codex" folder outside this library for credentials, infrastructure, deployment runbooks, connection details, and other operational agent memory. Use one durable item, one canonical owner, and never create competing copies across SharedKnowledgeLibrary and Codex.'
+description: 'Use the Google Drive folder "ChatGPT Library" as the canonical shared general-knowledge library for ChatGPT, Codex, Codex CLI, and other authorized agents. Read and write durable general knowledge directly there whenever the current task authorizes persistence. The skill must work correctly even when no bootstrap or scheduled reconciliation job exists. Treat native ChatGPT Library as immediate-access cache, mirror, and ingress rather than durable authority. A reconciliation job, when present, is optional catch-up infrastructure for native-Library items created outside an active SharedKnowledgeLibrary workflow. Keep the separate Google Drive "Codex" folder outside this library for credentials, infrastructure, deployment runbooks, connection details, and other operational agent memory. Enforce one durable item, one canonical owner, and never create competing copies across SharedKnowledgeLibrary and Codex.'
 ---
 
 # Shared Knowledge Library
 
 Use one canonical Google Drive tree as the durable general knowledge base shared by ChatGPT, Codex, Codex CLI, and other authorized agents.
+
+This skill is fully functional without any scheduled task.
 
 ## Canonical root
 
@@ -17,12 +19,12 @@ Google Drive folder:
 
 Treat the folder ID as the stable identifier.
 
-As of 2026-08-16, these existing canonical folders were moved under this root without changing their Drive IDs:
+As of 2026-08-16, these canonical subfolders exist under the root without changing their original Drive IDs:
 
 - `Medical records`, folder ID `1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3`
 - `Cynapsa`, folder ID `1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq`
 
-They are ordinary canonical subtrees of SharedKnowledgeLibrary. Do not maintain separate copies elsewhere in Drive.
+They are ordinary canonical subtrees of SharedKnowledgeLibrary. Do not maintain separate Drive copies elsewhere for synchronization purposes.
 
 ## Separate operational knowledge root
 
@@ -37,21 +39,29 @@ The distinction is semantic:
 - SharedKnowledgeLibrary answers: **what durable information do we know?**
 - Codex answers: **how do authorized agents operate the user's systems?**
 
-Do not duplicate a fact into both roots merely because both ChatGPT and Codex may need it.
+The consuming agent does not determine ownership. ChatGPT may read Codex when operational knowledge is needed, and Codex may read SharedKnowledgeLibrary when general knowledge is needed.
+
+Never duplicate a durable fact into both roots merely because multiple agents may need it.
 
 ## Transport independence
 
-This skill defines storage and ownership semantics, not the connector implementation.
+This skill defines storage and ownership semantics, not connector implementation.
 
-Use whatever authorized Google Drive capability exists in the current environment. ChatGPT may use its connected Google Drive app. Codex or Codex CLI may use an available Drive connector or another authorized integration. Other agents are responsible for having their own authorized Drive access.
+Use whatever authorized Google Drive capability exists in the current environment.
+
+Examples:
+
+- ChatGPT may use its connected Google Drive app.
+- Codex or Codex CLI may use an available Drive connector or other authorized Drive integration.
+- Other agents are responsible for having their own authorized Drive access.
 
 Do not require a custom MCP server merely to use this skill.
 
-If Drive access is unavailable, state that limitation and do not invent private library content.
+If canonical Drive access is unavailable, state the limitation. Do not invent private library content and do not pretend a native Library copy is canonical merely because Drive cannot currently be reached.
 
 ## Governing policy
 
-If `_LIBRARY_POLICY.md` exists at the canonical Drive root, read it before any non-trivial write or reconciliation operation and follow it as durable user policy.
+If `_LIBRARY_POLICY.md` exists at the canonical Drive root, read it before any non-trivial write, migration, or reconciliation operation and follow it as durable user policy.
 
 This skill and the policy are complementary:
 
@@ -60,7 +70,7 @@ This skill and the policy are complementary:
 
 Current explicit user instructions override older policy text when they conflict.
 
-## Source-of-truth rule
+## Core source-of-truth rule
 
 The canonical Google Drive item owns durable state.
 
@@ -69,42 +79,92 @@ Native ChatGPT Library is not a peer authority. It may contain:
 - files uploaded through ChatGPT;
 - files generated by ChatGPT;
 - mirrors of canonical Drive files;
-- recent material that has not yet been ingested into Drive.
+- recent material that has not yet been persisted into Drive.
 
 The fact that ChatGPT Web finds a native Library result first does not make that copy authoritative.
 
-For an already mapped item:
+For an already mapped or clearly corresponding item:
 
 ```text
 Google Drive / ChatGPT Library / path
         = canonical
 
 Native ChatGPT Library / path
-        = mirror/cache
+        = cache/mirror
 ```
 
-For a newly uploaded or generated native-Library item with no Drive mapping:
+For a newly uploaded or generated native-Library item that is intentionally being made durable:
 
 ```text
-Native ChatGPT Library
-        = ingress/staging
+current ChatGPT content
         ↓
-copy/adopt into canonical Drive
+write/adopt into canonical Drive now
         ↓
 Drive item becomes canonical
 ```
 
+Do not defer an authorized direct save by assuming a future scheduled job will handle it.
+
+## Operating states
+
+The skill must behave correctly in all three states below.
+
+### State A: no reconciliation job exists
+
+This is a supported normal configuration.
+
+- Read durable knowledge directly from canonical Drive.
+- When the user explicitly asks to save, keep, archive, add, or update durable general knowledge, write it directly to canonical Drive during the current task.
+- When an authorized workflow necessarily creates durable shared knowledge, persist it directly to Drive as part of that workflow.
+- Do not assume that native-Library-only uploads or generated artifacts will later be exported automatically.
+- Do not bulk-copy a pre-existing native ChatGPT Library merely because this skill was installed or invoked.
+
+The only limitation is that native-Library items created outside an active SharedKnowledgeLibrary workflow can remain local to that ChatGPT Library until explicitly saved, migrated, or caught by a later reconciliation job.
+
+### State B: a reconciliation job exists
+
+All State A behavior still applies.
+
+The recurring job is catch-up insurance. It may discover native-Library uploads or generated files that were created in unrelated chats or workflows and were never directly persisted to Drive.
+
+The existence of the job must never be used as a reason to postpone a direct Drive save that can be completed now.
+
+### State C: reconciliation status is unknown
+
+Assume no job will rescue the content.
+
+- Complete authorized durable Drive writes directly.
+- Never tell the user that a future sync will persist something unless the current environment has actually verified that such a task exists and is applicable.
+- Ordinary reads must not trigger a bulk migration merely to determine whether a sync exists.
+
+## Persistence authorization
+
+Installing or invoking this skill does not authorize bulk copying of existing native ChatGPT Library content.
+
+A direct Drive write is appropriate when at least one of the following is true:
+
+1. The user explicitly asks to save, archive, keep, add, upload, store, or update something in their Library/shared knowledge.
+2. The user explicitly asks to modify an existing canonical SharedKnowledgeLibrary item.
+3. An authorized workflow clearly requires durable shared state as part of its requested outcome.
+4. The current task changes a canonical item that was already being maintained under this skill.
+
+Do not persist every conversational answer, temporary generated artifact, or incidental upload merely because it could theoretically be useful later.
+
+Bulk migration of pre-existing native Library content requires an explicit bootstrap/migration request. Recurring catch-up requires an explicitly created scheduled task.
+
 ## ChatGPT Web behavior
 
-ChatGPT Web may naturally retrieve from native ChatGPT Library. Do not fight that behavior when it is useful for immediate access.
+ChatGPT Web may naturally retrieve from native ChatGPT Library. Use that behavior when useful for immediate access.
 
 However:
 
-1. For durable-library questions, prefer or verify against the canonical Drive tree when a mapped Drive item exists.
-2. If both a native Library result and canonical Drive item represent the same logical item, Drive wins on conflicts.
-3. A current-turn upload may be used immediately before ingestion because it is the user's newly supplied source.
-4. If the user asks to save durable content to "my Library" while this skill is active, interpret that as the canonical Google Drive `ChatGPT Library` unless the user explicitly says `native ChatGPT Library`, `built-in Library`, or equivalent.
-5. Do not create a second Drive copy simply because ChatGPT has already auto-saved a generated file to native Library.
+1. For durable-library questions, prefer or verify against the canonical Drive tree when a corresponding Drive item exists.
+2. If native Library and canonical Drive represent the same logical item and disagree, Drive wins unless the native item is a current-turn user-supplied source that has not yet been persisted and the user is explicitly asking about that new content.
+3. A current-turn upload may be used immediately without first copying it to Drive.
+4. If the user asks to make that upload durable or says `save this to my Library`, persist it directly to canonical Drive during the current task.
+5. When this skill is active, `save this to my Library` means canonical Google Drive `ChatGPT Library` unless the user explicitly says `native ChatGPT Library`, `built-in Library`, or equivalent.
+6. ChatGPT may automatically retain its own native Library copy. That does not create a second authority.
+7. Do not create a second Drive copy simply because ChatGPT has already auto-saved a generated file to native Library.
 
 ## Read behavior
 
@@ -113,15 +173,15 @@ When a request may depend on SharedKnowledgeLibrary:
 1. Identify the likely canonical domain and folder.
 2. Search the smallest relevant area of the canonical Drive root.
 3. Read the actual source files needed for the answer.
-4. Use native ChatGPT Library as an immediate-access or mirrored retrieval surface when useful, but do not let retrieval order override canonical ownership.
-5. If a native-Library item is known to be newer because it is a current-turn upload and has not yet been ingested, use it as the user's newly supplied source and treat it as pending ingress.
-6. If Drive and a mapped native copy disagree, use Drive and disclose the stale/conflicting mirror when material.
+4. Use native ChatGPT Library for current-turn uploads, immediate access, or mirrored retrieval when useful, but do not let retrieval order override canonical ownership.
+5. If Drive and a corresponding native copy disagree, use Drive for durable state and disclose the stale/conflicting mirror when material.
+6. Do not load the entire library into context when targeted retrieval is sufficient.
 
-Do not load the entire library into context when targeted retrieval is sufficient.
+Ordinary read access does not authorize migrating an unrelated native-Library item into Drive.
 
 ## Write behavior
 
-For durable general knowledge, write directly to the canonical Drive root whenever the environment permits.
+For authorized durable general knowledge, write directly to canonical Drive whenever the environment permits.
 
 Examples include:
 
@@ -129,16 +189,19 @@ Examples include:
 - company and project documents;
 - research and reference material;
 - memoir and writing material;
-- durable generated reports or artifacts;
+- durable generated reports or artifacts the user asked to retain;
 - user-maintained knowledge that should be available across agents.
 
 Before writing:
 
-1. Search for an existing canonical owner.
-2. Update the existing item instead of creating a duplicate when the logical item already exists.
-3. Preserve file IDs when updating or moving existing Drive items.
-4. Avoid parallel `v2`, `new`, `updated`, or dated copies unless they are genuinely separate artifacts.
-5. Re-read after the write and verify the intended result.
+1. Determine whether the item belongs in SharedKnowledgeLibrary or the separate Codex operational root.
+2. Search for an existing canonical owner.
+3. Update the existing item instead of creating a duplicate when the logical item already exists.
+4. Preserve Drive IDs when updating or moving existing Drive items.
+5. Avoid parallel `v2`, `new`, `updated`, or date-stamped copies unless they are genuinely separate artifacts.
+6. Re-read after the write and verify the intended result.
+
+If ChatGPT has already created a native Library copy of the same generated file, search Drive before upload and adopt/update an existing equivalent rather than producing a duplicate.
 
 ## One item, one owner
 
@@ -148,7 +211,7 @@ Do not maintain synchronized authoritative copies in multiple Drive locations.
 
 References are allowed. Duplication of authoritative content is not.
 
-For example:
+Examples:
 
 - a medical record belongs under `ChatGPT Library/Medical records`;
 - Cynapsa business knowledge belongs under `ChatGPT Library/Cynapsa`;
@@ -170,49 +233,52 @@ Route knowledge to `Codex` instead of SharedKnowledgeLibrary when its primary pu
 
 SharedKnowledgeLibrary may contain business or architectural documents that discuss systems conceptually. The boundary is operational purpose, not the mere presence of technical terminology.
 
-If classification is ambiguous and storing the item in the wrong root could create a conflicting source of truth or expose a secret more broadly, do not duplicate it. Ask one focused question or leave the new native-Library item pending classification.
+If classification is ambiguous and the wrong location could create conflicting sources of truth or expose a secret more broadly, do not duplicate it. Ask one focused question or leave a native-only item unpersisted pending classification.
 
 ## Medical records
 
-`Medical records` is now a canonical subtree under SharedKnowledgeLibrary.
+`Medical records` is a canonical subtree under SharedKnowledgeLibrary.
 
-Its stable Drive folder ID remains `1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3`.
+Its stable Drive folder ID is `1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3`.
 
-Existing medical-record-specific skills may continue using their existing Drive or native Library paths as long as they respect Drive as canonical.
+Existing medical-record-specific skills may continue using existing Drive or native Library paths as long as Drive remains canonical.
 
-A new untracked file uploaded into native ChatGPT Library under `/Medical records` may be ingested into the canonical Drive `Medical records` subtree by the unified reconciliation process. Once mapped, the Drive item owns subsequent durable state.
+If the user explicitly asks to save a current medical document to their records, write it directly into the canonical Drive `Medical records` subtree when possible. Do not wait for reconciliation.
 
 ## Cynapsa
 
-`Cynapsa` is now a canonical subtree under SharedKnowledgeLibrary.
+`Cynapsa` is a canonical subtree under SharedKnowledgeLibrary.
 
-Its stable Drive folder ID remains `1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq`.
+Its stable Drive folder ID is `1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq`.
 
 Business, investor, product, market, and project knowledge for Cynapsa may live there.
 
 Operational credentials and system-operation runbooks for Cynapsa still belong under the separate `Codex` operational root when that is their primary purpose.
 
-## Native ChatGPT Library ingestion
+If the user explicitly asks to retain Cynapsa general knowledge, write it directly into canonical Drive when possible rather than relying on a future sync.
 
-A reconciliation job may ingest new native ChatGPT Library files into canonical Drive.
+## Optional native ChatGPT Library ingestion
 
-An item is eligible for ingress only when it is not already a managed mirror and does not belong to an excluded surface such as the native `/Google Drive` mount.
+A bootstrap or reconciliation workflow may ingest previously untracked native ChatGPT Library files into canonical Drive.
 
-For a new untracked native item:
+This is optional infrastructure, not a prerequisite for the skill.
+
+For a new untracked native item considered by such a workflow:
 
 1. Determine its current Library path and identity.
-2. Check whether an equivalent canonical Drive item already exists.
-3. If an equivalent exists, adopt/map it instead of creating a duplicate.
-4. Otherwise upload it to the corresponding canonical Drive path.
-5. Verify Drive bytes/metadata as appropriate.
-6. Record the mapping in the unified manifest.
-7. From that point forward, Drive is authoritative.
+2. Classify it as SharedKnowledgeLibrary, Codex-owned operational knowledge, protected, or skip.
+3. Check whether an equivalent canonical Drive item already exists.
+4. If an equivalent exists, adopt/map it instead of creating a duplicate.
+5. Otherwise upload it to the corresponding canonical Drive path.
+6. Verify Drive bytes/metadata as appropriate.
+7. Record the mapping in the unified manifest.
+8. From that point forward, Drive is authoritative.
 
-Do not infer that every operational-looking native Library file belongs in SharedKnowledgeLibrary. Strongly operational or credential-bearing items should be skipped for classification rather than copied into both knowledge domains.
+Do not infer that every operational-looking native Library file belongs in SharedKnowledgeLibrary. Strongly operational or credential-bearing items should be held for classification rather than copied into both domains.
 
 ## Native Library mirror behavior
 
-Canonical Drive content may be mirrored into native ChatGPT Library for convenience and compatibility.
+When a reconciliation process exists, canonical Drive content may be mirrored into native ChatGPT Library for convenience and compatibility.
 
 For mapped items:
 
@@ -227,7 +293,7 @@ If mapped Drive and Library copies both changed independently since the last suc
 
 ## Unified manifest
 
-Maintain one canonical reconciliation manifest under the Drive root, preferably:
+When bootstrap/reconciliation is deployed, maintain one canonical reconciliation manifest under the Drive root, preferably:
 
 `_sync/_shared_library_manifest.json`
 
@@ -246,31 +312,33 @@ The manifest may track:
 
 The manifest is synchronization metadata, not documentary evidence.
 
+The absence of a manifest does not prevent normal direct read/write use of SharedKnowledgeLibrary.
+
 ## Google-native files
 
-When mirroring canonical Google-native files into native ChatGPT Library, use stable readable/export formats consistently. Unless a more appropriate representation is required:
+When mirroring canonical Google-native files into native ChatGPT Library, use stable readable/export formats consistently unless a better representation is required:
 
 - Google Docs → PDF
 - Google Sheets → XLSX
 - Google Slides → PDF
 
-The Google-native Drive item remains canonical. The exported Library representation is a mirror.
+The Google-native Drive item remains canonical. The exported Library representation is only a mirror.
 
 Do not export a Google-native file back into Drive as a competing non-native canonical copy.
 
 ## Deletion semantics
 
-Deletion is intentionally asymmetric.
+Deletion is intentionally asymmetric for reconciliation.
 
 Canonical Drive deletion:
 
-- may remove or trash the mapped native Library mirror after complete successful enumeration and reconciliation;
+- may remove or trash a mapped native Library mirror after complete successful enumeration and reconciliation;
 - must never be inferred from an incomplete scan.
 
 Native ChatGPT Library deletion:
 
 - never deletes canonical Drive;
-- may cause the mirror to be recreated later;
+- may cause a mirror to be recreated later if reconciliation exists;
 - does not change canonical ownership.
 
 Never permanently delete Library or Drive content as part of ordinary reconciliation.
@@ -286,8 +354,8 @@ Cases:
 - only Drive changed: Drive wins, refresh Library mirror;
 - only mapped Library mirror changed: do not overwrite Drive automatically, restore/refresh the mirror from Drive or report drift;
 - both changed: conflict, preserve both current states and report;
-- new untracked Library item: ingress candidate;
-- new Drive item: canonical, create/adopt mirror if needed.
+- new untracked Library item: optional ingress candidate for bootstrap/reconciliation;
+- new Drive item: canonical immediately, mirror/adopt if reconciliation exists.
 
 Never use modification timestamp alone as a last-writer-wins policy.
 
@@ -299,6 +367,8 @@ Do not disable them until the unified manifest has adopted their existing mappin
 
 After successful cutover, disable the old jobs rather than deleting them immediately, preserving a rollback path.
 
+A fresh ChatGPT installation that never had these legacy jobs does not need to create them. Direct Drive access through SharedKnowledgeLibrary is sufficient. A unified reconciliation task is optional catch-up infrastructure if native-Library ingestion/mirroring is desired.
+
 ## Privacy and secrets
 
 Treat all library content as private unless explicitly designated otherwise.
@@ -309,13 +379,19 @@ Secrets and operational credentials should normally live in the separate Codex o
 
 Do not copy secrets across roots merely for convenience.
 
-## No automatic installation or scheduling
+## No automatic installation, migration, or scheduling
 
-This source file does not authorize installation of the skill or creation/modification of scheduled tasks.
+This source file does not authorize installation of the skill, migration of existing native Library content, or creation/modification of scheduled tasks.
 
-Do not install this skill, enable it globally, create the unified reconciliation task, disable existing tasks, or run the bootstrap migration unless the user explicitly asks for that action.
+Do not:
 
-Publishing source changes to GitHub is also separate from installation.
+- install this skill globally or locally merely because its source is available;
+- run bulk bootstrap migration merely because the skill was invoked;
+- create the unified reconciliation task without explicit user authorization;
+- disable existing tasks without explicit user authorization;
+- treat skill installation as permission to copy an existing native ChatGPT Library into Drive.
+
+Publishing source changes to GitHub is separate from installation and scheduling.
 
 ## Final verification
 
@@ -324,14 +400,15 @@ Before completing a task that used this skill, verify as applicable:
 1. Canonical information came from the correct Drive root.
 2. `Codex` operational knowledge was not duplicated into SharedKnowledgeLibrary.
 3. Existing canonical items were updated rather than duplicated.
-4. Native Library did not silently outrank a mapped Drive item.
-5. New native-Library ingress was mapped only after Drive creation/adoption was verified.
-6. No native Library deletion propagated to Drive.
-7. Conflicting concurrent changes were not resolved by timestamp alone.
-8. Medical records and Cynapsa remained inside the single canonical Drive tree.
-9. Secrets were not unnecessarily copied or exposed.
-10. Any write was re-read and validated.
+4. Native Library did not silently outrank a corresponding Drive item.
+5. An authorized direct durable save was completed to Drive now rather than deferred to an assumed future sync.
+6. Ordinary reads did not trigger unauthorized bulk migration.
+7. Native Library deletion did not propagate to Drive.
+8. Conflicting concurrent changes were not resolved by timestamp alone.
+9. Medical records and Cynapsa remained inside the single canonical Drive tree.
+10. Secrets were not unnecessarily copied or exposed.
+11. Any write was re-read and validated.
 
 The governing principle is:
 
-**One canonical general library in Drive, one separate operational library in Codex, and native ChatGPT Library as cache, mirror, and ingress rather than a competing authority.**
+**One canonical general library in Drive, one separate operational library in Codex, native ChatGPT Library as cache/mirror/ingress, and reconciliation as optional catch-up rather than a prerequisite.**
