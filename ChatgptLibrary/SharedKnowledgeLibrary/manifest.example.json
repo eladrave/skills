@@ -3,109 +3,39 @@
   "canonical_root": {
     "provider": "google_drive",
     "folder_id": "1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb",
-    "name": "ChatGPT Library"
+    "folder_name": "ChatGPT Library"
   },
-  "separate_operational_root": {
-    "provider": "google_drive",
-    "folder_id": "18Woem9j4Tk-_FglrM6ZTGaNPZArUdJU0",
-    "name": "Codex",
-    "included_in_sync": false
-  },
-  "included_named_subtrees": {
-    "medical_records": "1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3",
-    "cynapsa": "1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq"
-  },
-  "control_paths": [
-    "/_LIBRARY_POLICY.md",
-    "/_sync/**"
+  "cutover_at": "2026-08-16T00:00:00Z",
+  "hard_exclusions": [
+    "/Google Drive/**",
+    "/Medical records/_drive_sync_manifest.json",
+    "/Cynapsa/_drive_sync_manifest.json"
   ],
-  "native_library_hard_exclusions": [
-    "/Google Drive/**"
+  "legacy_native_subtrees": [
+    {
+      "path": "/Medical records",
+      "canonical_drive_folder_id": "1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3",
+      "rule": "items present at or before cutover_at are legacy Drive-backed copies and must not be re-ingested"
+    },
+    {
+      "path": "/Cynapsa",
+      "canonical_drive_folder_id": "1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq",
+      "rule": "items present at or before cutover_at are legacy Drive-backed copies and must not be re-ingested"
+    }
   ],
-  "last_successful_full_reconciliation_at": null,
-  "deletion_reconciliation_ever_enabled": false,
   "items": [
     {
-      "logical_id": "example-logical-id",
+      "native_library_file_id": "file_example",
+      "native_library_path": "/Example/report.pdf",
+      "native_library_version": 1,
+      "drive_file_id": "drive_example",
+      "drive_relative_path": "Example/report.pdf",
+      "origin": "chatgpt-generated",
       "status": "managed",
-      "origin": "chatgpt-library-upload",
-      "canonical": {
-        "drive_id": "example-drive-file-id",
-        "relative_path": "/Projects/example.pdf",
-        "mime_type": "application/pdf",
-        "modified_time": "2026-08-16T12:00:00Z",
-        "revision_or_checksum": "optional-provider-value"
-      },
-      "native_library": {
-        "library_file_id": "example-library-file-id",
-        "relative_path": "/Projects/example.pdf",
-        "version": "1",
-        "size_bytes": 12345
-      },
-      "mirror_representation": {
-        "kind": "original",
-        "export_format": null
-      },
-      "baseline": {
-        "drive_modified_time": "2026-08-16T12:00:00Z",
-        "drive_revision_or_checksum": "optional-provider-value",
-        "library_version": "1",
-        "library_size_bytes": 12345
-      },
-      "legacy_adoption": null,
-      "last_verified_at": "2026-08-16T12:05:00Z",
-      "notes": null
-    },
-    {
-      "logical_id": "example-adopted-medical-id",
-      "status": "managed",
-      "origin": "legacy-medical-sync-adopted",
-      "canonical": {
-        "drive_id": "example-medical-drive-id",
-        "relative_path": "/Medical records/example.pdf",
-        "mime_type": "application/pdf",
-        "modified_time": "2026-08-15T10:00:00Z",
-        "revision_or_checksum": null
-      },
-      "native_library": {
-        "library_file_id": "example-existing-library-id",
-        "relative_path": "/Medical records/example.pdf",
-        "version": "4",
-        "size_bytes": 55555
-      },
-      "mirror_representation": {
-        "kind": "original",
-        "export_format": null
-      },
-      "baseline": {
-        "drive_modified_time": "2026-08-15T10:00:00Z",
-        "drive_revision_or_checksum": null,
-        "library_version": "4",
-        "library_size_bytes": 55555
-      },
-      "legacy_adoption": {
-        "source": "/Medical records/_drive_sync_manifest.json",
-        "adopted_at": "2026-08-16T12:05:00Z"
-      },
-      "last_verified_at": "2026-08-16T12:05:00Z",
-      "notes": null
-    },
-    {
-      "logical_id": "example-pending-classification",
-      "status": "pending-classification",
-      "origin": "chatgpt-library-upload",
-      "canonical": null,
-      "native_library": {
-        "library_file_id": "example-untracked-library-id",
-        "relative_path": "/possible-credentials.md",
-        "version": "1",
-        "size_bytes": 321
-      },
-      "mirror_representation": null,
-      "baseline": null,
-      "legacy_adoption": null,
-      "last_verified_at": null,
-      "notes": "Strongly operational or credential-bearing; do not auto-ingest into SharedKnowledgeLibrary."
+      "last_verified_at": "2026-08-16T00:00:00Z"
     }
-  ]
+  ],
+  "pending_classification": [],
+  "failures": [],
+  "last_run": null
 }
