@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "canonical_drive_root_id": "1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb",
+  "last_bootstrap_at": null,
+  "last_incremental_scan_at": null,
+  "last_full_scan_at": null,
+  "items": {
+    "<native-library-file-id>": {
+      "source_library_file_id": "<native-library-file-id>",
+      "source_library_path": "/example/report.pdf",
+      "source_version_id": "<native-library-version-id>",
+      "source_created_at": "<timestamp>",
+      "source_modified_at": "<timestamp>",
+      "source_mime_type": "application/pdf",
+      "source_size": 0,
+      "source_fingerprint": "<checksum-or-null>",
+      "source_model_generated": false,
+      "drive_file_id": "<google-drive-file-id>",
+      "drive_path": "/example/report.pdf",
+      "drive_mime_type": "application/pdf",
+      "drive_modified_at_at_sync": "<timestamp>",
+      "drive_fingerprint_at_sync": "<checksum-revision-or-null>",
+      "last_synced_source_version": "<native-library-version-id>",
+      "state": "synced",
+      "last_synced_at": "<timestamp>",
+      "note": null
+    }
+  },
+  "allowed_states": [
+    "synced",
+    "source_missing",
+    "destination_missing",
+    "conflict",
+    "excluded_external_source",
+    "excluded_drive_mount",
+    "skipped_operational_candidate",
+    "skipped_transient",
+    "failed"
+  ]
+}
