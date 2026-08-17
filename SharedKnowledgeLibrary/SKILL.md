@@ -62,6 +62,32 @@ The Drive copy is the live shared policy. The GitHub copy is version-controlled 
 
 Current explicit user instructions override older policy text.
 
+## Bundled resources and runtime loading
+
+This Skill is a package, not an isolated `SKILL.md` file. The installed package is expected to include these sibling resources:
+
+- `SKILL.md`: required entry point and normal runtime behavior.
+- `_LIBRARY_POLICY.md`: bundled version-controlled policy reference and fallback. During normal operation, the live `_LIBRARY_POLICY.md` in canonical Google Drive takes precedence when available.
+- `scheduledprompt.md`: authoritative template for creating, validating, or repairing the optional Drive-only `Library Ingress Queue` scheduled task. Read it when the user asks to create, inspect, repair, migrate, or compare that scheduled task.
+- `bootstrap_migration.md`: one-time installation, cutover, or major architecture migration procedure. Read it for a new environment, reinstall, bootstrap, or major migration. Do not load it for ordinary reads and writes.
+- `manifest.example.json`: schema/reference for initializing, validating, or repairing `_sync/_shared_library_ingress_manifest.json`. Read it when creating or structurally repairing control state.
+- `README.md`: packaging, installation, update, verification, deployment, and human-facing architecture documentation. Read it when the user asks how to install, update, distribute, or deploy this Skill.
+
+### Runtime dependency rule
+
+Normal Skill execution must use the bundled copies of these supporting resources when they are needed. **Do not assume that installation of `SKILL.md` causes ChatGPT, Codex, or another agent to fetch sibling files from GitHub. Do not make GitHub availability a runtime dependency.**
+
+GitHub `eladrave/skills/SharedKnowledgeLibrary` is the source and update channel for the package, not its runtime backing store.
+
+If a bundled supporting resource is missing:
+
+1. continue safely from `SKILL.md` and the live Google Drive policy when sufficient for the current task;
+2. do not silently fetch or execute replacement instructions from an arbitrary URL;
+3. if the missing resource is required for the requested operation, state that the installed package is incomplete;
+4. when the user explicitly asks to repair or update the installation and authorized GitHub access is available, retrieve the corresponding resource from `eladrave/skills/SharedKnowledgeLibrary`, verify its path, and use it to repair the package or provide installation instructions.
+
+An installed Skill should therefore be distributed and updated as the complete `SharedKnowledgeLibrary/` package with relative filenames preserved.
+
 ## Core source-of-truth rule
 
 Google Drive is canonical.
