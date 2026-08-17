@@ -88,11 +88,26 @@ The scheduled task then performs only Drive-to-Drive adoption or moves.
 
 ## One skill for the whole library
 
-`SharedKnowledgeLibrary/SKILL.md` is the only general Library skill required.
+`SharedKnowledgeLibrary/` is one complete Skill package.
 
-It includes domain-specific behavior for `Medical records` and covers `Cynapsa` and all future subfolders under the canonical Drive root. Adding another folder under `ChatGPT Library` does not require another skill or another Drive-to-Library sync task.
+`SKILL.md` is the entry point, but it is not the only useful file in this Skill. Keep the supporting files with it when installing, updating, exporting, or moving the Skill to another ChatGPT/Codex installation.
+
+The package includes domain-specific behavior for `Medical records` and covers `Cynapsa` and all future subfolders under the canonical Drive root. Adding another folder under `ChatGPT Library` does not require another skill or another Drive-to-Library sync task.
 
 The old `ChatgptLibrary/MedicalRecords` and `ChatgptLibrary/DriveLibraryMetaSkill` sources are retired by this architecture.
+
+## Package contents and roles
+
+Install or transfer the complete `SharedKnowledgeLibrary/` package with these files together:
+
+- `SKILL.md`: required Skill entry point and normal runtime behavior.
+- `_LIBRARY_POLICY.md`: version-controlled policy source and fallback/reference. The live copy in canonical Google Drive remains authoritative during operation.
+- `scheduledprompt.md`: authoritative template for creating or updating the optional Drive-only `Library Ingress Queue` scheduled task. It is not automatically executed merely because the Skill is installed.
+- `bootstrap_migration.md`: one-time installation/cutover procedure for a new environment or major architecture migration. It is not part of normal per-request execution.
+- `manifest.example.json`: schema/example used when initializing or repairing `_sync/_shared_library_ingress_manifest.json`.
+- `README.md`: architecture, packaging, installation, update, verification, and deployment documentation.
+
+Do not separate `SKILL.md` from these support files when distributing this Skill. A minimal `SKILL.md`-only copy may still contain the core runtime instructions, but it is an incomplete package and loses the deployment, reconciliation, bootstrap, and manifest resources.
 
 ## Skill behavior without a scheduled job
 
@@ -123,7 +138,7 @@ Do not automatically persist every upload, answer, screenshot, or generated prev
 
 ## Optional recurring reconciliation
 
-`scheduledprompt.md` now defines a **Drive-only** queue processor.
+`scheduledprompt.md` defines a **Drive-only** queue processor.
 
 It:
 
@@ -155,57 +170,53 @@ The older `Medical Records Sync` and `Sync Cynapsa Drive` jobs mirrored Drive in
 
 Do not recreate them on a fresh installation.
 
-## Files
-
-- `SKILL.md`: install this skill.
-- `_LIBRARY_POLICY.md`: version-controlled source for the live policy stored in canonical Drive.
-- `bootstrap_migration.md`: historical one-time cutover procedure and reference, not a recurring architecture.
-- `scheduledprompt.md`: optional recurring Drive-only ingress queue processor.
-- `manifest.example.json`: control-state schema including the Drive queue.
-- `README.md`: architecture, installation, update, and deployment guide.
-
 ## Install the skill in ChatGPT
 
-GitHub is only the source repository. Updating this repository does **not** automatically update an already installed Personal Skill in ChatGPT.
+GitHub is the source repository. Updating GitHub does **not** automatically update an already installed Personal Skill in ChatGPT.
 
-OpenAI's current Skills UI is under:
+OpenAI Skills support instructions plus supporting resources. Install this as the complete `SharedKnowledgeLibrary/` Skill package rather than uploading an isolated `SKILL.md` and discarding the sibling files.
+
+Current ChatGPT navigation is:
 
 `Plugins` → `Skills`
 
 For a new installation:
 
-1. Open ChatGPT.
-2. In the sidebar, open `Plugins`.
-3. Open the `Skills` tab.
-4. Choose `Create`.
-5. Choose `Upload from your computer`.
-6. Upload the current `SharedKnowledgeLibrary/SKILL.md` from this repository.
-7. Review the scan result. If ChatGPT marks the upload `Needs Review`, review it before enabling it.
-8. Install or save the skill when prompted.
-9. Confirm that `shared-knowledge-library` appears in your installed or created Skills.
+1. Obtain the complete `SharedKnowledgeLibrary/` package from this repository, preserving the filenames and relative layout.
+2. Open ChatGPT.
+3. In the sidebar, open `Plugins`.
+4. Open the `Skills` tab.
+5. Choose `Create`.
+6. Choose `Upload from your computer`, or use the Skills editor/skill-creator workflow.
+7. Import the complete Skill package so `SKILL.md` and its supporting resources belong to the same Skill.
+8. Review the scan result. If ChatGPT marks the upload `Needs Review`, review it before enabling it.
+9. Install or save the Skill when prompted.
+10. Confirm that `shared-knowledge-library` appears in your installed or created Skills.
 
-Only `SKILL.md` needs to be installed as the Skill itself. The other repository files are documentation and version-controlled operational references. The live `_LIBRARY_POLICY.md` is read from Google Drive by the installed skill.
+If the particular uploader you are using only exposes one-file-at-a-time selection, use the Skills editor or skill-creator workflow to create the Skill from `SKILL.md` and add the remaining package files as supporting resources. Do not intentionally reduce the installed package to `SKILL.md` alone.
 
-Personal Skills are surface-specific in ChatGPT. If you use both ChatGPT desktop and web/mobile and need the skill on both, install it separately on each applicable surface. Do not assume a Personal Skill installation automatically syncs between surfaces.
+Personal Skills are surface-specific in ChatGPT. If you use both ChatGPT desktop and web/mobile and need the Skill on both, install it separately on each applicable surface. Do not assume a Personal Skill installation automatically syncs between surfaces.
 
 ## Update an already installed skill
 
-An installed Personal Skill does not track GitHub automatically. When `SharedKnowledgeLibrary/SKILL.md` changes, refresh the installed copy deliberately.
+An installed Personal Skill does not track GitHub automatically. When any file in `SharedKnowledgeLibrary/` changes, update the installed Skill package deliberately.
 
 Preferred update procedure:
 
 1. Open `Plugins` → `Skills`.
 2. Find `shared-knowledge-library` under `Installed` or `Created by me`.
-3. If the skill is editable in the Skills editor, open it and replace its instructions with the current contents of `SharedKnowledgeLibrary/SKILL.md`, then save/update it.
-4. If the installed/uploaded copy is not editable in place, use `Create` → `Upload from your computer` and upload the new `SKILL.md` as a fresh skill version.
-5. After the new version is installed and verified, remove, disable, or stop using the old copy if the UI offers that control, so two different versions are not active at the same time.
-6. Repeat the update separately on each ChatGPT surface where you installed the Personal Skill.
+3. Open it in the Skills editor if editing is available.
+4. Replace/update `SKILL.md` and every supporting resource that changed in the repository.
+5. Ensure `_LIBRARY_POLICY.md`, `scheduledprompt.md`, `bootstrap_migration.md`, `manifest.example.json`, and `README.md` remain attached to the same Skill package.
+6. Save/update the Skill.
+7. If the installed/uploaded copy cannot be edited in place, create/import a fresh copy of the complete package, verify it, then remove, disable, or stop using the old copy if the UI offers that control.
+8. Repeat the update separately on each ChatGPT surface where you installed the Personal Skill.
 
-ChatGPT can also help modify a Skill through the built-in skill-creator workflow. If you use that route, give it the current `SKILL.md` and explicitly require it to preserve the skill name `shared-knowledge-library` and the Drive IDs in this repository.
+ChatGPT can also help modify a Skill through the built-in skill-creator workflow. If you use that route, provide the complete package and explicitly require it to preserve the skill name `shared-knowledge-library`, the supporting resources, and the Drive IDs in this repository.
 
 ## Verify the installed version
 
-After installing or updating, start a fresh chat and ask the installed skill to describe its persistence architecture without making changes.
+After installing or updating, start a fresh chat and ask the installed Skill to describe its persistence architecture without making changes.
 
 A correct current version should state all of the following:
 
@@ -216,21 +227,25 @@ A correct current version should state all of the following:
 - Scheduled reconciliation is Google Drive only.
 - Native ChatGPT Library is not a scheduled dependency.
 
-If it still describes an hourly native-Library scan using `files.list` or `files.materialize`, the old skill version is still installed or active.
+Also ask it which supporting resources are bundled. It should recognize `scheduledprompt.md`, `bootstrap_migration.md`, `_LIBRARY_POLICY.md`, and `manifest.example.json` as part of the package and explain their roles.
+
+If it still describes an hourly native-Library scan using `files.list` or `files.materialize`, or cannot see the supporting resources, the old or incomplete Skill version is still installed.
 
 ## Scheduled task deployment
 
-Installing the Skill does not itself create or update the optional recurring queue processor.
+Installing the Skill package does not itself create or update the optional recurring queue processor.
 
 If deploying this architecture on a new ChatGPT installation:
 
-1. Install the current `SKILL.md`.
+1. Install the complete `SharedKnowledgeLibrary/` Skill package.
 2. Verify access to canonical Google Drive `ChatGPT Library`.
 3. Verify the live Drive `_LIBRARY_POLICY.md`.
 4. Verify or create `ChatGPT Ingress Queue` and record its folder ID in the manifest.
-5. Create the optional recurring task from `scheduledprompt.md` only if queue reconciliation is desired.
-6. Keep old Drive-to-native-Library sync jobs disabled.
-7. Do not create a scheduled native ChatGPT Library inventory job.
+5. Initialize or validate the manifest using `manifest.example.json` when needed.
+6. Use `bootstrap_migration.md` for a first-time cutover or migration when applicable.
+7. Create the optional recurring task from `scheduledprompt.md` only if queue reconciliation is desired.
+8. Keep old Drive-to-native-Library sync jobs disabled.
+9. Do not create a scheduled native ChatGPT Library inventory job.
 
 ## Governing principle
 
