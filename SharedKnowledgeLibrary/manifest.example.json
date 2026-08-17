@@ -5,37 +5,64 @@
     "folder_id": "1EQyBOpv3j_wNDW4pWtWrBq1_eukGmtRb",
     "folder_name": "ChatGPT Library"
   },
-  "cutover_at": "2026-08-16T00:00:00Z",
-  "hard_exclusions": [
-    "/Google Drive/**",
-    "/Medical records/_drive_sync_manifest.json",
-    "/Cynapsa/_drive_sync_manifest.json"
-  ],
   "legacy_native_subtrees": [
     {
       "path": "/Medical records",
       "canonical_drive_folder_id": "1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3",
-      "rule": "items present at or before cutover_at are legacy Drive-backed copies and must not be re-ingested"
+      "rule": "legacy convenience copy only; never authoritative"
     },
     {
       "path": "/Cynapsa",
       "canonical_drive_folder_id": "1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq",
-      "rule": "items present at or before cutover_at are legacy Drive-backed copies and must not be re-ingested"
+      "rule": "legacy convenience copy only; never authoritative"
     }
   ],
   "items": [
     {
-      "native_library_file_id": "file_example",
+      "native_library_file_id": "file_historical_example",
       "native_library_path": "/Example/report.pdf",
       "native_library_version": 1,
-      "drive_file_id": "drive_example",
+      "drive_file_id": "drive_historical_example",
       "drive_relative_path": "Example/report.pdf",
-      "origin": "chatgpt-generated",
+      "origin": "historical-native-library-migration",
       "status": "managed",
       "last_verified_at": "2026-08-16T00:00:00Z"
     }
   ],
+  "drive_ingress_queue": {
+    "folder_id": "1PwNOvDU-3VQdF6uoRyS8KJS5JAP_j_an",
+    "folder_name": "ChatGPT Ingress Queue",
+    "items": [
+      {
+        "queued_drive_file_id": "drive_queue_example",
+        "original_filename": "example.pdf",
+        "source": "current-upload",
+        "requested_domain": "Medical records",
+        "requested_relative_path": null,
+        "canonical_destination_folder_id": "1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3",
+        "classification": "durable-general-knowledge",
+        "staged_at": "2026-08-17T00:00:00Z",
+        "status": "queued",
+        "canonical_drive_file_id": null,
+        "canonical_relative_path": null,
+        "last_verified_at": "2026-08-17T00:00:00Z"
+      }
+    ]
+  },
   "pending_classification": [],
   "failures": [],
-  "last_run": null
+  "last_run": {
+    "at": "2026-08-17T00:00:00Z",
+    "mode": "drive-ingress-queue",
+    "queue_discovered": 1,
+    "managed": 0,
+    "adopted": 0,
+    "pending_operational": 0,
+    "pending_ambiguous": 0,
+    "orphans": 0,
+    "conflicts": 0,
+    "failures": 0,
+    "backlog_may_remain": false,
+    "blocker": null
+  }
 }
