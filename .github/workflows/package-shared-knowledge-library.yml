@@ -75,17 +75,35 @@ jobs:
           short_sha="${GITHUB_SHA::7}"
           tag="shared-knowledge-library-${short_sha}"
           title="SharedKnowledgeLibrary ${short_sha}"
+          notes="Installable SharedKnowledgeLibrary Skill package built from commit $GITHUB_SHA. The ZIP has SKILL.md at its archive root and includes all bundled support resources."
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" \
-              SharedKnowledgeLibrary.zip \
-              SharedKnowledgeLibrary.zip.sha256 \
-              --clobber
-          else
-            gh release create "$tag" \
-              SharedKnowledgeLibrary.zip \
-              SharedKnowledgeLibrary.zip.sha256 \
-              --target "$GITHUB_SHA" \
-              --title "$title" \
-              --notes "Installable SharedKnowledgeLibrary Skill package built from commit $GITHUB_SHA. The ZIP has SKILL.md at its archive root and includes all bundled support resources."
-          fi
+          for attempt in 1 2 3 4 5; do
+            echo "Release publish attempt $attempt of 5"
+
+            if gh release view "$tag" >/dev/null 2>&1; then
+              if gh release upload "$tag" \
+                SharedKnowledgeLibrary.zip \
+                SharedKnowledgeLibrary.zip.sha256 \
+                --clobber; then
+                exit 0
+              fi
+            else
+              if gh release create "$tag" \
+                SharedKnowledgeLibrary.zip \
+                SharedKnowledgeLibrary.zip.sha256 \
+                --target "$GITHUB_SHA" \
+                --title "$title" \
+                --notes "$notes"; then
+                exit 0
+              fi
+            fi
+
+            if [ "$attempt" -lt 5 ]; then
+              sleep_seconds=$((attempt * 5))
+              echo "GitHub release API attempt failed; retrying in ${sleep_seconds}s"
+              sleep "$sleep_seconds"
+            fi
+          done
+
+          echo "Failed to publish GitHub release after 5 attempts" >&2
+          exit 1
