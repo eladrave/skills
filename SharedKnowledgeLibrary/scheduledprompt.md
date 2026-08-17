@@ -1,10 +1,10 @@
-# SharedKnowledgeLibrary Native-Library Ingress
+# SharedKnowledgeLibrary Drive Ingress Queue Processor
 
-This prompt defines the optional recurring catch-up task for SharedKnowledgeLibrary.
+This prompt defines the optional recurring reconciliation task for SharedKnowledgeLibrary.
 
-Its purpose is narrow: find durable files that exist only in native ChatGPT Library and persist them into canonical Google Drive `ChatGPT Library`.
+Its purpose is narrow: process files that an authorized foreground task already staged in the private Google Drive `ChatGPT Ingress Queue`, then adopt or move them into the correct canonical Google Drive location after classification and duplicate checks.
 
-It is **not** a Drive-to-Library mirror and must never attempt to keep native Library synchronized from Drive.
+This scheduled task must use **Google Drive only**. It must never depend on native ChatGPT Library or the Files connector.
 
 ## Canonical Drive root
 
@@ -16,66 +16,87 @@ Included canonical subtrees include:
 - `Medical records`, ID `1MppW8kw3fUFFa2d2IwtkJBGNn1W8KnM3`
 - `Cynapsa`, ID `1CgmULpoDQPIc-TJAiDughNHxbcKHvaWq`
 
-Separate operational root, never ingested as general library content:
+Separate operational root, never treated as general library content:
 
 - `Codex`, ID `18Woem9j4Tk-_FglrM6ZTGaNPZArUdJU0`
 
-## Live policy
+## Neutral queue
 
-Read `_LIBRARY_POLICY.md` from the canonical Drive root before making changes.
+- Folder: `ChatGPT Ingress Queue`
+- ID: `1PwNOvDU-3VQdF6uoRyS8KJS5JAP_j_an`
 
-Use control folder:
+The queue is private staging only. It is not canonical SharedKnowledgeLibrary content and it is not Codex.
 
-`ChatGPT Library/_sync/`
+## Live policy and control state
 
-Use ingress manifest:
+Before making changes:
 
-`_sync/_shared_library_ingress_manifest.json`
+1. Read `_LIBRARY_POLICY.md` from canonical Drive `ChatGPT Library`.
+2. Read `_sync/_shared_library_ingress_manifest.json` as control state.
+3. Use `drive_ingress_queue.items` in the manifest as authoritative queue metadata.
 
-The manifest may be a Google Doc containing JSON text if raw-file creation is unavailable. Treat its text as JSON control data.
+The manifest may be a Google Doc containing JSON text when raw-file creation is unavailable. Treat its text as JSON control data.
+
+## Scheduled dependency rule
+
+The scheduled job may depend only on Google Drive.
+
+Do not call or require:
+
+- native ChatGPT Library;
+- `files.list`;
+- `files.search`;
+- `files.materialize`;
+- any Drive-to-native-Library synchronization mechanism.
+
+Foreground tasks are responsible for persisting original bytes into canonical Drive or the neutral Drive queue while those bytes are available.
 
 ## Core rules
 
-1. Google Drive is canonical.
-2. Native ChatGPT Library is only an ingress source.
-3. Never copy Drive content back into native Library.
-4. Never delete, rename, move, or overwrite canonical Drive because of a native Library mutation.
-5. Never ingest the native `/Google Drive/**` connector-backed tree.
-6. Never use newest timestamp as a general winner rule.
-7. Before creating anything in Drive, search for an existing logical equivalent and adopt it instead of duplicating it.
-8. Strongly operational or credential-bearing items belong to separate `Codex`, not SharedKnowledgeLibrary. Report them for classification instead of copying them into both roots.
+1. Google Drive `ChatGPT Library` is canonical general knowledge.
+2. Google Drive `Codex` is the separate operational domain.
+3. `ChatGPT Ingress Queue` is temporary staging only.
+4. Native ChatGPT Library is not part of this scheduled workflow.
+5. Never copy Drive content back into native Library.
+6. Never delete or overwrite canonical Drive because of queue or native Library state.
+7. Never use newest timestamp as a general winner rule.
+8. Search for an existing logical equivalent before moving a queued item into canonical Drive.
+9. Preserve Drive file IDs when possible by moving the existing queued Drive file rather than downloading and re-uploading it.
+10. Operational or credential-bearing items must not be moved into SharedKnowledgeLibrary.
 
-## Legacy subtree cutover
+## Queue inventory
 
-The pre-existing native Library `/Medical records` and `/Cynapsa` trees are legacy Drive-backed copies from retired per-folder sync jobs.
+List up to 100 direct items in `ChatGPT Ingress Queue`.
 
-The ingress manifest contains a `cutover_at` timestamp.
+If 100 items are returned, treat a backlog as potentially remaining and process a safe bounded subset, then continue on later runs.
 
-For these two native Library paths:
+Never delete queue files as ordinary cleanup.
 
-- items created or already present before `cutover_at` are legacy copies and must not be uploaded back into Drive;
-- items newly created after `cutover_at` and not otherwise mapped may be considered for ingress into the corresponding canonical Drive subtree.
+## Queue metadata
 
-The legacy `_drive_sync_manifest.json` files themselves are control metadata and must never be ingested.
+Each staged item should have a manifest entry containing at least:
 
-## Inventory
+- queued Drive file ID;
+- original filename;
+- source, such as current upload or generated artifact;
+- requested domain/path when known;
+- canonical destination folder ID/path when known;
+- classification when known;
+- staged time;
+- status.
 
-Recursively enumerate native ChatGPT Library with pagination.
+If a physical queue file has no manifest entry:
 
-Hard exclude:
-
-- `/Google Drive/**`
-- `/Medical records/_drive_sync_manifest.json`
-- `/Cynapsa/_drive_sync_manifest.json`
-- protected/internal Library artifacts that cannot safely be materialized
-
-Read the ingress manifest and build a set of already-managed native Library IDs.
+1. do not guess its destination;
+2. record it once as `orphan-pending`;
+3. notify the user because foreground staging metadata is missing;
+4. leave the file in the queue.
 
 ## Classification
 
-For each untracked candidate, classify as one of:
+Use one of these classifications:
 
-### A. Eligible durable general knowledge
+### A. Durable general knowledge
 
 Examples:
 
@@ -85,93 +106,130 @@ Examples:
 - project/business material;
 - medical material;
 - Cynapsa general knowledge;
-- durable ChatGPT-generated reports/artifacts.
+- durable generated reports or artifacts.
 
-### B. Strongly operational or credential-bearing
+Category A may move into canonical SharedKnowledgeLibrary once the destination is verified.
+
+### B. Operational or credential-bearing
 
 Examples:
 
-- passwords, tokens, API keys, secret-bearing URLs;
+- passwords, tokens, API keys, private keys, secret-bearing URLs;
 - MCP connection details;
-- SSH/production connection instructions;
-- deployment, rollback, recovery, or infrastructure operating runbooks.
+- SSH or production connection instructions;
+- private infrastructure details;
+- deployment, rollback, recovery, or system-operation runbooks.
 
-Do not ingest category B into SharedKnowledgeLibrary. Mark `pending-classification` and report only path/name and reason, never secret values.
+Do not move category B into SharedKnowledgeLibrary.
 
-### C. Temporary or low-durable-value artifact
+Leave it in the neutral queue as `pending-operational` and notify once without exposing secret values.
 
-Examples may include throwaway previews, transient intermediates, obvious duplicates, or files whose purpose cannot be established.
+Do not move it into `Codex` unless the user or an applicable operational workflow explicitly authorizes that write.
 
-Do not delete them. Mark `skipped` unless a retention rule says otherwise.
+### C. Temporary or ambiguous
 
-When uncertain, prefer pending/skipped over creating a duplicate.
+Examples may include throwaway previews, transient intermediates, obvious duplicates, or files whose durable purpose cannot be established safely.
 
-## Ingress workflow
+Leave them in the queue as `pending-ambiguous` when a decision is required. Do not repeatedly notify for an unchanged pending item.
 
-For each eligible candidate:
+When uncertain, prefer pending over guessing.
 
-1. Determine the canonical Drive relative destination.
-2. Preserve the native Library path when reasonable.
-3. Search Drive for an existing logical equivalent using path/name plus available size, MIME/type, content/hash/revision evidence.
-4. If equivalent exists, record adoption and do not upload.
-5. Otherwise materialize the native Library file using supported Files tools.
-6. Upload it to the correct canonical Drive folder, preserving filename and MIME type when practical.
-7. Verify the Drive file exists and metadata/size/type are plausible.
-8. Record native Library ID, version, Drive ID/path, origin, and status in the ingress manifest.
-9. Do not delete the native Library source.
+## Reconciliation workflow
 
-If a mapped native item changes later, do not automatically overwrite Drive. Treat Drive as canonical and report drift only when material.
+For each queue entry that is not already resolved:
+
+1. Confirm the queued Drive file still exists.
+2. Confirm its manifest metadata.
+3. Determine or verify classification.
+4. For durable general knowledge, determine the canonical destination folder ID/path.
+5. Search the canonical destination for an existing logical equivalent using filename/path plus available size, MIME/type, content, hash, or revision evidence.
+6. If an equivalent exists, record `adopted` with the canonical Drive file ID and do not create a duplicate.
+7. If no equivalent exists, move the queued Drive file into the canonical destination using Drive parent metadata so the same Drive file ID is preserved when possible.
+8. Verify the resulting file ID, title, MIME type, and destination parent.
+9. Only after verification, mark the entry `managed` and record the canonical Drive identity/path.
+10. Never overwrite a canonical item from queue content.
+
+## Already tracked items
+
+Do not repeat work or alerts for entries already marked:
+
+- `managed`;
+- `adopted`;
+- `pending-operational`;
+- `pending-ambiguous`;
+- `orphan-pending`.
+
+Reconsider them only when the Drive file, manifest entry, or explicit user classification decision materially changes.
 
 ## Folder creation
 
-Create missing canonical Drive folders only when needed for an eligible ingress item.
+Create missing canonical Drive folders only when necessary for a verified durable general-knowledge destination.
 
 Before creating a folder, check for an existing folder with the intended name/path.
 
 Do not reorganize unrelated canonical Drive content.
 
-## Existing root backlog
+## Duplicate and conflict handling
 
-At initial cutover, there may be many pre-existing native Library files outside `/Medical records`, `/Cynapsa`, and `/Google Drive`.
+Before moving or adopting a queue item:
 
-These may be ingested as a backlog when they clearly qualify as durable general knowledge.
+1. check the manifest by queued Drive file ID;
+2. search the canonical destination;
+3. compare path/name, size, MIME/type, and available content/hash/revision evidence;
+4. adopt an equivalent instead of duplicating it;
+5. if equivalence is ambiguous, mark `conflict` and leave the queued file in place.
 
-Process non-destructively. It is acceptable to ingest a bounded batch per run if the backlog is large, as long as the manifest records progress and later runs continue from remaining untracked candidates.
+Never use newest timestamp as a general conflict-resolution rule.
 
 ## Failure behavior
 
-If native Library listing is incomplete, materialization fails, Drive access fails, destination identity is ambiguous, or a create cannot be verified:
+If Drive access fails, destination identity is ambiguous, a move cannot be verified, or duplicate identity is unresolved:
 
+- fail closed;
 - do not guess;
-- do not overwrite canonical Drive;
-- record failure/pending status when possible;
-- continue only with independent safe items;
-- do not perform destructive cleanup.
+- do not overwrite or delete canonical Drive;
+- leave the queued source in place;
+- record failure or pending state when possible;
+- continue only with independent safe items.
+
+If Google Drive itself is temporarily unavailable, retry the specific failed read once after fresh Google Drive action discovery when possible. If it still fails, end without mutations.
+
+Notify only after 3 consecutive scheduled Drive-runtime failures, because Google Drive is the only scheduled dependency.
+
+## Manifest update behavior
+
+Update the manifest only after verified results.
+
+Record a concise `last_run` summary with counts for:
+
+- queue items discovered;
+- managed;
+- adopted;
+- pending operational;
+- pending ambiguous;
+- orphan pending;
+- conflicts;
+- failures;
+- whether a backlog may remain.
+
+The manifest is control metadata, not documentary evidence.
 
 ## Report behavior
 
 Notify the user only when at least one of these occurs:
 
-- new files were ingested or existing Drive equivalents were adopted;
-- pending operational classifications were found;
-- conflicts or failures occurred;
-- a meaningful backlog remains after a bounded run.
+- files were moved into canonical Drive;
+- existing canonical equivalents were adopted;
+- a new operational classification needs attention;
+- a new ambiguous item actually requires a decision;
+- an orphan, conflict, or failure was found;
+- a meaningful queue backlog may remain;
+- Google Drive has failed for 3 consecutive scheduled runs.
 
-If nothing changed and there are no issues, do not notify.
-
-When reporting, include counts for:
-
-- native items scanned;
-- already managed/legacy skipped;
-- ingested;
-- existing Drive equivalents adopted;
-- pending operational classification;
-- skipped temporary/ambiguous;
-- failures;
-- remaining backlog when known.
+If the queue is empty or every item is unchanged and resolved, do not notify.
 
 Never expose secret values.
 
 ## Absolute safety rule
 
-**This task may add or adopt canonical Drive content, but native ChatGPT Library can never authorize deletion or destructive modification of canonical Drive.**
+**This task may adopt or move staged Google Drive files into canonical SharedKnowledgeLibrary, but it must never depend on native ChatGPT Library and must never let queue or native Library state authorize deletion, overwrite, or destructive modification of canonical Drive.**
