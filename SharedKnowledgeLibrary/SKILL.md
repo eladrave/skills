@@ -1,6 +1,6 @@
 ---
 name: shared-knowledge-library
-description: 'Use the Google Drive folder "ChatGPT Library" as the single canonical shared general-knowledge library for ChatGPT, Codex, Codex CLI, and other authorized agents. Read and write durable general knowledge directly in Drive. Treat native ChatGPT Library only as immediate-access storage and an ingress source for uploads or generated files that have not yet been persisted to Drive. Never require Drive content to be mirrored back into native ChatGPT Library. Keep the separate Google Drive "Codex" folder outside this library for credentials, infrastructure, deployment runbooks, private connection details, and other operational agent memory. Use one durable item, one canonical owner, and never create competing copies across SharedKnowledgeLibrary and Codex.'
+description: 'Use the Google Drive folder "ChatGPT Library" as the single canonical shared general-knowledge library for ChatGPT, Codex, Codex CLI, and other authorized agents. Read and write durable general knowledge directly in Drive. When an authorized foreground task needs durable persistence but the final canonical destination or classification is not yet known, stage the original file in the private Google Drive "ChatGPT Ingress Queue" and record queue metadata for later Drive-only reconciliation. Native ChatGPT Library is immediate-access storage only and must never be a scheduled dependency. Keep the separate Google Drive "Codex" folder outside this library for credentials, infrastructure, deployment runbooks, private connection details, and other operational agent memory. Use one durable item, one canonical owner, and never create competing copies across SharedKnowledgeLibrary and Codex.'
 ---
 
 # Shared Knowledge Library
@@ -34,17 +34,29 @@ Codex answers: **how do authorized agents operate the user's systems?**
 
 The consumer does not determine ownership. Do not duplicate an item across both roots merely because multiple agents may need it.
 
+## Neutral Drive ingress queue
+
+A private Google Drive staging folder exists for authorized durable files whose final canonical destination or classification is not yet known at foreground execution time.
+
+- Name: `ChatGPT Ingress Queue`
+- Folder ID: `1PwNOvDU-3VQdF6uoRyS8KJS5JAP_j_an`
+- URL: `https://drive.google.com/drive/folders/1PwNOvDU-3VQdF6uoRyS8KJS5JAP_j_an`
+
+The queue is **not canonical general knowledge** and is **not Codex**. It is temporary Drive staging so foreground tasks can persist original bytes while they still have reliable access to the file.
+
+Do not use the queue as a dumping ground. Use it only when the current task is already authorized to durably persist the item, but the canonical destination or ownership classification cannot yet be safely determined.
+
 ## Transport independence
 
-This skill defines storage and ownership semantics, not the connector implementation.
+This skill defines storage and ownership semantics, not a specific connector implementation.
 
 Use whatever authorized Google Drive capability exists in the current environment. Do not require a custom MCP server.
 
-If Drive access is unavailable, state that limitation and do not invent private library content.
+If Drive access is unavailable, state that limitation and do not invent private library content or claim persistence.
 
 ## Live policy
 
-Before a non-trivial write, migration, or reconciliation operation, read `_LIBRARY_POLICY.md` from the canonical Drive root when available.
+Before a non-trivial write, migration, queue reconciliation, or ownership decision, read `_LIBRARY_POLICY.md` from the canonical Drive root when available.
 
 The Drive copy is the live shared policy. The GitHub copy is version-controlled source.
 
@@ -54,15 +66,31 @@ Current explicit user instructions override older policy text.
 
 Google Drive is canonical.
 
-Native ChatGPT Library is **not** a mirror that must be kept synchronized from Drive. It serves only:
+Native ChatGPT Library is **not** a mirror and is **not** part of the scheduled reconciliation path.
 
-1. immediate access to uploads and ChatGPT-generated artifacts;
-2. legacy local copies that may already exist;
-3. ingress/staging for durable files that have not yet been persisted to canonical Drive.
+It may contain:
+
+1. current uploads;
+2. ChatGPT-generated files;
+3. legacy convenience copies from older sync jobs;
+4. files automatically retained by ChatGPT.
+
+Use native Library for immediate foreground access when useful. Once a logical item exists in canonical Drive, Drive owns durable state.
 
 There is intentionally no requirement to copy canonical Drive changes back into native ChatGPT Library.
 
-This removes duplicate authorities and avoids Drive-to-Library transfer limitations.
+## Reliability model
+
+The correctness path is foreground write-through to Google Drive.
+
+Use this order:
+
+1. If the canonical destination is known, persist directly to that canonical Drive location now.
+2. If durable persistence is authorized but the canonical destination or classification is genuinely uncertain, stage the original file in `ChatGPT Ingress Queue` and record queue metadata in the ingress manifest.
+3. A recurring queue processor may later reconcile staged Drive files into canonical Drive using Google Drive only.
+4. Native ChatGPT Library is never required for scheduled correctness.
+
+Do not defer an authorized durable save because a future scheduled task might exist.
 
 ## ChatGPT Web behavior
 
@@ -73,32 +101,15 @@ Ownership still follows these rules:
 1. A current-turn upload is the user's newest supplied source and may be used immediately.
 2. If the same logical item exists in canonical Drive, Drive owns durable state.
 3. When freshness or conflict matters, read the canonical Drive item.
-4. If the user asks to persist a current upload or generated artifact, write/adopt it into Drive now.
-5. Native Library auto-retention does not create a second source of truth.
+4. If the user asks to persist a current upload or generated artifact and the destination is known, write or adopt it into Drive immediately.
+5. If durable persistence is authorized but destination or ownership is uncertain, stage it in the Drive ingress queue rather than relying on native Library retention.
+6. Native Library auto-retention does not create a second source of truth.
 
-For durable-library questions, prefer Drive whenever practical. Native Library may supplement discovery but must not silently override a canonical Drive item.
-
-## Direct persistence works without scheduling
-
-A scheduled reconciliation job is optional.
-
-If the current authorized task creates or changes durable general knowledge, persist it directly to Drive whenever possible.
-
-Examples:
-
-- `save this to my Library`;
-- `add this to Medical records`;
-- `keep this in Cynapsa`;
-- update a canonical project/reference document;
-- save a durable generated report meant to be available across agents.
-
-Do not defer a save by assuming a future sync job exists.
-
-Installing the skill does not authorize bulk migration of an existing native ChatGPT Library.
+For durable-library questions, prefer Drive whenever practical. Native Library may supplement foreground discovery but must not silently override a canonical Drive item.
 
 ## Meaning of “save to my Library”
 
-When this skill applies, `save this to my Library` means save the durable item under canonical Google Drive `ChatGPT Library`, unless the user explicitly asks for native/built-in ChatGPT Library.
+When this skill applies, `save this to my Library` means save the durable item under canonical Google Drive `ChatGPT Library`, unless the user explicitly asks for native or built-in ChatGPT Library.
 
 ChatGPT may also retain an automatic native Library copy. That copy is non-authoritative.
 
@@ -109,38 +120,107 @@ When a request may depend on SharedKnowledgeLibrary:
 1. Identify the likely canonical Drive subtree.
 2. Search the smallest relevant area of the canonical Drive root.
 3. Read the actual source file needed for the answer.
-4. Use native Library only when it materially helps, such as a current-turn upload or a file that has not yet been ingested.
-5. Do not load the entire library when targeted retrieval is sufficient.
+4. Use current-turn uploads immediately when they are the newest supplied source.
+5. Use native Library only when it materially helps foreground discovery or the user explicitly asks for it.
+6. Do not load the entire library when targeted retrieval is sufficient.
 
-## Write behavior
+## Direct write behavior
 
-For durable general knowledge:
+For authorized durable general knowledge when the destination is known:
 
 1. Determine the correct canonical Drive subtree.
-2. Search for an existing logical owner.
-3. Update the existing canonical item when appropriate rather than creating a duplicate.
+2. Search for an existing logical owner before creating anything.
+3. Update or adopt the existing canonical item when appropriate instead of creating a duplicate.
 4. Preserve Drive IDs when moving or updating existing items.
 5. Avoid `new`, `v2`, `updated`, or dated parallel copies unless they are genuinely separate artifacts.
-6. Re-read or inspect metadata after the mutation and verify success.
+6. Preserve filename and MIME type when practical for stored files.
+7. Re-read or inspect Drive metadata after the mutation and verify success.
 
-Do not automatically store every answer, temporary artifact, or incidental upload.
+Do not automatically store every answer, temporary artifact, incidental upload, screenshot, or generated preview.
 
-## Native Library ingress
+Installing this skill does not authorize bulk migration of a pre-existing native ChatGPT Library.
 
-An optional reconciliation job may catch native-Library-only files that were created outside a task that directly persisted them.
+## Foreground staging behavior
 
-For a new untracked native Library item:
+Use `ChatGPT Ingress Queue` only when all of these are true:
 
-1. Exclude `/Google Drive/**` and other connector-backed/protected surfaces.
-2. Determine whether it is durable general knowledge.
-3. Determine whether it belongs in SharedKnowledgeLibrary or the separate Codex operational domain.
-4. Search canonical Drive for an existing logical equivalent.
-5. If an equivalent exists, adopt/map it and do not upload a duplicate.
-6. Otherwise upload it into the correct canonical Drive path.
-7. Verify the Drive result.
-8. Record an ingress mapping so the same native item is not uploaded again.
+1. the current user request or authorized workflow calls for durable persistence;
+2. the original file bytes are available in the current foreground runtime;
+3. the final canonical destination or SharedKnowledgeLibrary-versus-Codex ownership cannot yet be determined safely.
 
-After ingress, Drive is canonical. The native copy may remain, but no reverse synchronization is required.
+When staging:
+
+1. Search the queue for an existing equivalent first when practical.
+2. Upload the original file into `ChatGPT Ingress Queue`, preserving filename and MIME type when practical.
+3. Verify the staged Drive file ID, title, MIME type, and queue parent.
+4. Update `_sync/_shared_library_ingress_manifest.json` only after verification.
+5. Record a `drive_ingress_queue.items` entry containing at least:
+   - queued Drive file ID;
+   - original filename;
+   - source, such as current upload or generated artifact;
+   - requested domain/path when known;
+   - classification when known;
+   - staged time;
+   - status.
+6. Do not mark the item canonical merely because it is in the queue.
+
+Recommended queue statuses include:
+
+- `queued`;
+- `managed`;
+- `adopted`;
+- `pending-operational`;
+- `pending-ambiguous`;
+- `orphan-pending`;
+- `conflict`;
+- `failure`.
+
+## Scheduled reconciliation
+
+Scheduled reconciliation must be **Google Drive only**.
+
+The recurring job may read:
+
+- canonical Drive `ChatGPT Library`;
+- `_LIBRARY_POLICY.md`;
+- `_sync/_shared_library_ingress_manifest.json`;
+- Google Drive `ChatGPT Ingress Queue`.
+
+It must **not** depend on native ChatGPT Library, `files.list`, `files.search`, or `files.materialize`.
+
+For each staged queue item:
+
+1. Read its queue metadata from the manifest.
+2. If metadata is missing, mark it `orphan-pending` and do not guess its destination.
+3. If it is durable general knowledge with a verified canonical destination, search the destination for an existing logical equivalent.
+4. If an equivalent exists, record `adopted` with the canonical Drive file ID and do not create a duplicate.
+5. If no equivalent exists, move the queued Drive file into the canonical destination using Drive parent metadata so the same Drive file ID is preserved when possible.
+6. Verify file ID, title, MIME type, and destination parent before recording `managed`.
+7. If it is operational or credential-bearing, leave it in the neutral queue as `pending-operational`. Do not move it into SharedKnowledgeLibrary.
+8. Do not move operational content into Codex unless the current user request or an applicable operational workflow explicitly authorizes that write.
+9. If classification or destination remains uncertain, leave it in the queue as `pending-ambiguous` rather than guessing.
+10. Never delete queued or canonical Drive files as part of ordinary reconciliation.
+
+The scheduled queue processor is a cleanup and classification path, not the primary persistence path.
+
+## Native ChatGPT Library audits
+
+Native ChatGPT Library may be audited interactively in a foreground conversation when explicitly useful, for example to find a suspected stranded file.
+
+Such an audit is maintenance, not the scheduled architecture.
+
+For a native Library file found during an authorized interactive audit:
+
+1. Determine whether durable persistence is actually authorized or required.
+2. Classify SharedKnowledgeLibrary versus Codex versus temporary/ambiguous.
+3. Search canonical Drive for an existing logical equivalent.
+4. If an equivalent exists, adopt the Drive item and do not duplicate it.
+5. If eligible durable general knowledge must be persisted and the destination is known, materialize the native file and write it directly to canonical Drive.
+6. If persistence is authorized but the destination remains uncertain, materialize and stage it in the Drive ingress queue.
+7. Verify the Drive result before updating control state.
+8. Never let native Library drift overwrite canonical Drive.
+
+Do not schedule native Library audits and do not bulk-migrate native Library without explicit authorization.
 
 ## Legacy Medical Records and Cynapsa Library copies
 
@@ -148,11 +228,9 @@ Existing native Library `/Medical records` and `/Cynapsa` trees were created by 
 
 They are legacy convenience copies, not canonical storage.
 
-During cutover, adopt their legacy manifest mappings into the ingress manifest solely to prevent those existing Library copies from being mistaken for new uploads and re-ingested into Drive.
+Do not recreate missing Drive files from legacy native mirrors merely because the mirror exists. Drive owns those trees.
 
-Do not recreate missing Drive files from legacy Library mirrors merely because the mirror exists. Drive owns those trees.
-
-Once the ingress manifest safely recognizes those legacy mirrors, the old per-folder Drive-to-Library jobs are unnecessary and should remain disabled.
+The old per-folder Drive-to-Library jobs are unnecessary and should remain disabled.
 
 On a fresh ChatGPT installation, do not create those legacy jobs.
 
@@ -192,7 +270,7 @@ Use it for requests involving medical history, surgeries, diagnoses, treatments,
 
 ### Medical writes
 
-When the user asks to save or update medical records, write directly to the canonical Drive `Medical records` subtree, preserve a single canonical owner, and verify the write. Do not depend on the retired Drive-to-native-Library mirror job.
+When the user asks to save or update medical records, write directly to the canonical Drive `Medical records` subtree, preserve a single canonical owner, and verify the write.
 
 A current-turn medical upload may be used immediately as the user's newest supplied source. Persist it into Drive only when the user or an authorized workflow calls for durable storage.
 
@@ -216,11 +294,13 @@ Strong Codex-owned examples include:
 - production configuration ownership;
 - durable instructions whose purpose is allowing agents to operate a system.
 
-If a native Library file strongly appears operational or credential-bearing, do not ingest it into SharedKnowledgeLibrary and do not silently copy it to Codex. Mark/report it for classification unless the current user request independently authorizes the Codex write.
+If an item strongly appears operational or credential-bearing, do not ingest it into SharedKnowledgeLibrary and do not silently copy it to Codex. Leave it in the neutral queue as `pending-operational` when it was already staged, or report it for classification unless the current user request independently authorizes the Codex write.
+
+Never expose secret values in queue reports or classification notifications.
 
 ## Ingress manifest
 
-If catch-up reconciliation is deployed, keep control data under:
+Keep queue and reconciliation control data under:
 
 `ChatGPT Library/_sync/`
 
@@ -228,14 +308,14 @@ Recommended manifest:
 
 `_sync/_shared_library_ingress_manifest.json`
 
-Track enough information to prevent repeated ingress:
+The manifest should track:
 
-- native Library file ID and path;
-- native Library version when available;
-- canonical Drive file ID and relative path;
-- origin such as upload/generated/legacy-mirror-adopted;
-- last verified state;
-- status such as managed, pending-classification, conflict, or skipped.
+- canonical root metadata;
+- historical native-Library migration/adoption mappings when needed for legacy protection;
+- `drive_ingress_queue.folder_id`;
+- `drive_ingress_queue.items` with queued Drive identity, source, requested destination, classification, status, and canonical mapping when resolved;
+- conflicts and failures;
+- last verified run state.
 
 The manifest is control metadata, not documentary evidence.
 
@@ -243,29 +323,29 @@ The manifest is control metadata, not documentary evidence.
 
 Native Library deletion, move, rename, or content drift never deletes, moves, renames, or overwrites canonical Drive.
 
-The ingress job must never delete canonical Drive content.
+Queue reconciliation must never delete canonical Drive content.
+
+Ordinary queue processing must not permanently delete queue items either. A managed queue item should normally be moved into canonical Drive while preserving its Drive identity.
 
 Canonical Drive deletion does not need to propagate to native Library because native Library is not maintained as an authoritative mirror.
-
-Ordinary ingress should not permanently delete anything from either surface.
 
 ## Duplicate and conflict prevention
 
 Never use newest timestamp as a general conflict-resolution rule.
 
-Before creating a Drive item from native Library:
+Before moving or adopting a queued item:
 
-1. check the manifest by native Library ID;
+1. check the manifest by queued Drive file ID;
 2. search the canonical destination;
 3. compare filename, path, size, MIME/type, and available content/hash/revision evidence;
-4. adopt an equivalent instead of creating a duplicate;
+4. adopt an equivalent instead of creating or moving a competing copy;
 5. if equivalence is ambiguous, mark a conflict rather than guessing.
 
-A changed native copy of an already-mapped item does not automatically overwrite Drive.
+A native Library copy or queue item does not automatically overwrite Drive.
 
 ## Privacy and secrets
 
-Treat library content as private unless explicitly designated otherwise.
+Treat library and queue content as private unless explicitly designated otherwise.
 
 Use only information needed for the current task. Do not expose medical, financial, personal, company, credential, or operational secrets unnecessarily.
 
@@ -273,7 +353,7 @@ Do not copy operational secrets into SharedKnowledgeLibrary when they belong in 
 
 ## No automatic installation, migration, or scheduling
 
-The existence of this source does not authorize installation, bulk migration, task creation, or task disablement. Those are separately authorized actions.
+The existence of this source does not authorize installation, bulk migration, task creation, queue creation, or task enablement/disablement. Those are separately authorized actions.
 
 ## Final verification
 
@@ -281,12 +361,13 @@ Before completing a task that uses this skill, verify as applicable:
 
 1. Canonical facts came from the correct Drive root.
 2. Codex-owned operational information was not duplicated into SharedKnowledgeLibrary.
-3. Existing canonical Drive items were updated instead of duplicated.
+3. Existing canonical Drive items were updated or adopted instead of duplicated.
 4. Native Library did not silently outrank canonical Drive.
-5. Authorized durable content was written directly to Drive when possible.
-6. New native ingress was verified before being marked managed.
-7. No native Library mutation propagated destructively to Drive.
-8. Medical records and Cynapsa remained under the canonical Drive root with their stable IDs.
-9. Any Drive write was re-read or metadata-verified.
+5. Authorized durable content was written directly to canonical Drive when the destination was known.
+6. Authorized uncertain durable content was staged in the Drive ingress queue only when necessary and only after verifying the staged Drive file.
+7. Queue reconciliation used Google Drive only and verified each move/adoption before updating the manifest.
+8. No native Library or queue mutation propagated destructively to canonical Drive.
+9. Medical records and Cynapsa remained under the canonical Drive root with their stable IDs.
+10. Any Drive write or move was re-read or metadata-verified.
 
-**Governing principle: one canonical general library in Google Drive, one separate operational library in Codex, and native ChatGPT Library only as immediate access and optional ingress.**
+**Governing principle: one canonical general library in Google Drive, one separate operational library in Codex, foreground write-through to Drive as the correctness path, a Drive-only ingress queue for uncertain durable items, and native ChatGPT Library only as immediate foreground access or optional interactive maintenance.**
