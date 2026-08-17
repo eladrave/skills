@@ -109,6 +109,14 @@ Install or transfer the complete `SharedKnowledgeLibrary/` package with these fi
 
 Do not separate `SKILL.md` from these support files when distributing this Skill. A minimal `SKILL.md`-only copy may still contain the core runtime instructions, but it is an incomplete package and loses the deployment, reconciliation, bootstrap, and manifest resources.
 
+### GitHub is not a runtime dependency
+
+The installed Skill should contain its supporting resources. **Do not expect ChatGPT, Codex, or another agent to automatically fetch sibling files from this GitHub repository merely because `SKILL.md` came from here.**
+
+GitHub `eladrave/skills/SharedKnowledgeLibrary` is the source and update channel for the package. Normal runtime execution should use the files bundled with the installed Skill plus the live Google Drive policy and control state.
+
+If a supporting file is missing from an installed Skill, treat that installation as incomplete. Fetch from GitHub only as an explicit repair/update action when the user requests it and authorized GitHub access is available. Do not make normal Skill operation depend on GitHub being connected or reachable.
+
 ## Skill behavior without a scheduled job
 
 `SKILL.md` works independently of automation:
@@ -195,7 +203,7 @@ For a new installation:
 
 If the particular uploader you are using only exposes one-file-at-a-time selection, use the Skills editor or skill-creator workflow to create the Skill from `SKILL.md` and add the remaining package files as supporting resources. Do not intentionally reduce the installed package to `SKILL.md` alone.
 
-Personal Skills are surface-specific in ChatGPT. If you use both ChatGPT desktop and web/mobile and need the Skill on both, install it separately on each applicable surface. Do not assume a Personal Skill installation automatically syncs between surfaces.
+Personal Skills are surface-specific in ChatGPT. If you use both ChatGPT desktop and web/mobile and need the skill on both, install it separately on each applicable surface. Do not assume a Personal Skill installation automatically syncs between surfaces.
 
 ## Update an already installed skill
 
