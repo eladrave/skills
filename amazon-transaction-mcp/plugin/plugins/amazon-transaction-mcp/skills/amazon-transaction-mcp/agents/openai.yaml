@@ -1,0 +1,6 @@
+interface:
+  display_name: "Amazon Transaction MCP"
+  short_description: "Use Amazon orders and payments safely"
+  default_prompt: "Use $amazon-transaction-mcp to retrieve my Amazon orders and item prices safely."
+policy:
+  allow_implicit_invocation: true

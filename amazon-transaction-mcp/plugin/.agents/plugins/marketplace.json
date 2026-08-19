@@ -1,0 +1,20 @@
+{
+  "name": "amazon-transactions",
+  "interface": {
+    "displayName": "Amazon Transactions"
+  },
+  "plugins": [
+    {
+      "name": "amazon-transaction-mcp",
+      "source": {
+        "source": "local",
+        "path": "./plugins/amazon-transaction-mcp"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

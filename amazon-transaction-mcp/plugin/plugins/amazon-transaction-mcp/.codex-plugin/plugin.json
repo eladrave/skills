@@ -1,0 +1,38 @@
+{
+  "name": "amazon-transaction-mcp",
+  "version": "0.1.0",
+  "description": "Use a private Amazon account's orders, item prices, shipments, and payment transactions through a read-only MCP workflow.",
+  "author": {
+    "name": "Elad Rave",
+    "url": "https://github.com/eladrave"
+  },
+  "homepage": "https://github.com/eladrave/skills/tree/main/amazon-transaction-mcp/plugin",
+  "repository": "https://github.com/eladrave/skills",
+  "keywords": [
+    "amazon",
+    "orders",
+    "transactions",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Amazon Transaction MCP",
+    "shortDescription": "Read private Amazon orders and transactions",
+    "longDescription": "Connect to the private Amazon Transaction MCP and follow its timeout-safe workflows for order history, item prices, transactions, login recovery, and MFA.",
+    "developerName": "Elad Rave",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "MCP",
+      "MFA"
+    ],
+    "websiteURL": "https://github.com/eladrave/amazon-transaction-mcp",
+    "defaultPrompt": [
+      "Get last week's Amazon orders and each item's price.",
+      "Find my recent Amazon purchases matching a product name.",
+      "List recent Amazon charges and refunds."
+    ],
+    "brandColor": "#FF9900"
+  }
+}

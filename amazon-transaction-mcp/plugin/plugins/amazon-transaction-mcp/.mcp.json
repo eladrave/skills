@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "amazon-transaction-mcp": {
+      "url": "https://amazon.eladrave.com/mcp",
+      "bearer_token_env_var": "AMAZON_TRANSACTION_MCP_TOKEN",
+      "startup_timeout_sec": 15,
+      "tool_timeout_sec": 30
+    }
+  }
+}
