@@ -168,6 +168,7 @@ skills/
 │
 ├── StrandsAgents/                       # Strands Agents SDK engineering guide
 ├── TailScaleManagmet/                   # Tailscale Management API skill
+├── amazon-transaction-mcp/              # Private Amazon orders/transactions MCP skill
 ├── creating-codex-custom-subagents/     # Codex subagent generator + validators/templates
 ├── creating-composio-mcp-servers/       # Composio MCP creation/configuration skill
 ├── litellm-agent-control-plane/         # LACP agent builder + API client
@@ -182,7 +183,7 @@ skills/
 └── docs/                                # design/supporting docs, NOT a skill
 ```
 
-There are currently **18 `SKILL.md` files** in the repository.
+There are currently **17 `SKILL.md` files** in the repository.
 
 ## Architecture and selection rules
 
@@ -254,6 +255,7 @@ Do not silently fall back from one to the other.
 
 | Skill | Repository path | Use when | Important dependencies | Safe smoke test |
 |---|---|---|---|---|
+| `amazon-transaction-mcp` | [`amazon-transaction-mcp/`](amazon-transaction-mcp/) | Retrieve private Amazon orders, item prices, shipments, and payment transactions while handling expired login, MFA, bounded retries, pagination, and short MCP client timeouts. | Connected and authorized private Amazon Transaction MCP. | Call `amazon_auth_status(check_live=false)`, then make one bounded read such as `amazon_list_orders(time_filter="last7", all_pages=false, full_details=false)`. Do not expose credentials, tokens, cookies, or OTP values. |
 | `tailscale-management` | [`TailScaleManagmet/`](TailScaleManagmet/) | Inspect or manage the configured Tailscale tailnet through the Management API, including devices, routes, exit nodes, DNS, ACL/policy, users, keys, webhooks, services, and settings. | `codex-drive-as-knowledge`, Google Drive access to the pinned `TailScale.md` runbook, current Tailscale API access. | Load the authoritative runbook without exposing its credential, then perform the documented read-only API preflight or device-list call. Do not mutate Tailscale as a smoke test. |
 | `plivo` | [`plivo/`](plivo/) | Use a connected Plivo MCP to find/select a sender and operate SMS, MMS, and voice. Live MCP schemas and enums are authoritative. | Connected/authenticated Plivo MCP, persistent memory if cross-session sender reuse is desired. | Discover enabled actions and live schemas, enumerate sender-number capabilities, and stop before sending anything. |
 | `plivo-whatsapp` | [`plivowhatsapp/`](plivowhatsapp/) | Configure and use Plivo WhatsApp safely, including template synchronization/search, freeform/template sends, and delivery checks. | Python. Live sending requires Plivo credentials and the official SDK, installed only under the skill's consent workflow. | Run `python3 -m pytest plivowhatsapp/tests` when `pytest` is available, plus `python3 plivowhatsapp/scripts/plivo_whatsapp.py template inspect-text --text 'Hello {{1}}'`. No message is sent. |
