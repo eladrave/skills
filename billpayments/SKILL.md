@@ -1,6 +1,6 @@
 ---
 name: billpayments
-description: Use when the user asks ChatGPT or Codex to receive, store, track, review, or pay an ordinary bill or invoice, including a medical, utility, insurance, household, or service-provider bill. Combines canonical Google Drive storage, a Google Sheets payment ledger, the official Privacy MCP, Remote Browser, and an optional billing profile from the shared knowledge library. Requires a user-initiated foreground session, exact merchant and amount verification, a limited single-use virtual card, explicit authorization before transmitting payment credentials, and fresh final approval immediately before submitting the transaction.
+description: Use when the user asks ChatGPT or Codex to receive, store, track, review, or pay an ordinary bill or invoice, including a medical, utility, insurance, household, or service-provider bill. Combines canonical Google Drive storage, a Google Sheets payment ledger, the official Privacy MCP, Remote Browser, and a private billing profile from the shared knowledge library. Requires a user-initiated foreground session, exact merchant and amount verification, a limited single-use virtual card, explicit authorization before transmitting payment credentials, and fresh final approval immediately before submitting the transaction.
 ---
 
 # Bill Payments
@@ -56,6 +56,9 @@ Use Google Drive `ChatGPT Library/Bill Payments` as the canonical owner for ordi
 - `Bills/<YYYY>/`: original uploaded bills and invoices.
 - `Receipts/<YYYY>/`: provider receipts and payment confirmations.
 - `Bill Payments Ledger`: the native Google Sheet, using its `Payments` tab for one durable row per logical bill.
+- `Bill Payment Profile.md`: the private canonical source for the user's payment-form identity, Privacy.com billing address, separate home address, phone number, email, and field-specific usage rules.
+
+Treat `ChatGPT Library/Bill Payments/Bill Payment Profile.md` as the default billing-profile source when a payment form requires identity, address, phone, or email. Read the actual current Drive file during each workflow. Do not embed its values in this skill, its public source, the payment ledger, filenames, card memos, or completion summaries.
 
 Before a non-trivial Drive write, read the live shared-library policy. Search the canonical destination and ledger before creating a file or row. Adopt an existing logical equivalent instead of creating a duplicate.
 
@@ -142,13 +145,15 @@ Do not create the Privacy card until the final total is known. If the site revea
 
 ### 5. Obtain or collect the billing profile
 
-Use an existing billing profile from the shared knowledge library only when the user explicitly directs the workflow to that source.
+Use the canonical private billing profile from the shared knowledge library when the payment form requires identity, address, phone, or email.
 
-1. Search the smallest likely canonical Drive location.
-2. Read the actual profile document rather than relying on memory or search snippets.
-3. Confirm that the profile is identified as the billing profile for the Privacy card, not merely the user's current residence.
-4. Do not silently update or create a billing-profile document.
-5. If the profile is absent, ambiguous, or conflicting, ask the user for the missing non-card fields at the point they are needed.
+1. Locate `ChatGPT Library/Bill Payments/Bill Payment Profile.md` in the verified canonical folder.
+2. Read the actual current profile document rather than relying on memory, chat history, or search snippets.
+3. Use the address labeled as the Privacy.com card billing address for Privacy virtual-card billing fields.
+4. Use the separately labeled home address only when the provider explicitly requests a home, residential, service, or mailing address.
+5. Never substitute the home address for the Privacy.com card billing address.
+6. If the document is absent, stale, ambiguous, or conflicts with the provider form, stop and ask the user before changing or submitting the affected fields.
+7. Do not silently update the profile during a payment workflow. Update it only from a direct user instruction and verify the Drive write.
 
 Treat the name, address, phone number, and email as sensitive data. Include their transmission to the verified provider in the card-use authorization below.
 
@@ -254,7 +259,7 @@ Report only masked and necessary information:
 - Masked card last four digits.
 - Any uncertainty, decline, pending state, or follow-up required.
 
-Verify that the original bill is stored, the payment row reflects the final supported status, and any available receipt is saved and linked. Do not save the billing profile or any card credentials in the bill folders or ledger.
+Verify that the original bill is stored, the payment row reflects the final supported status, and any available receipt is saved and linked. Do not copy the billing profile or any card credentials into the bill folders, receipts, or ledger.
 
 ## Failure boundaries
 
