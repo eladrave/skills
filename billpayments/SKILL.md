@@ -1,6 +1,6 @@
 ---
 name: billpayments
-description: Use when the user asks ChatGPT or Codex to review and pay an ordinary bill or invoice, including a medical, utility, insurance, household, or service-provider bill, by combining the official Privacy MCP, Remote Browser, and an optional billing profile from the shared knowledge library. Requires a user-initiated foreground session, exact merchant and amount verification, a limited single-use virtual card, explicit authorization before transmitting payment credentials, and fresh final approval immediately before submitting the transaction.
+description: Use when the user asks ChatGPT or Codex to receive, store, track, review, or pay an ordinary bill or invoice, including a medical, utility, insurance, household, or service-provider bill. Combines canonical Google Drive storage, a Google Sheets payment ledger, the official Privacy MCP, Remote Browser, and an optional billing profile from the shared knowledge library. Requires a user-initiated foreground session, exact merchant and amount verification, a limited single-use virtual card, explicit authorization before transmitting payment credentials, and fresh final approval immediately before submitting the transaction.
 ---
 
 # Bill Payments
@@ -13,7 +13,8 @@ Load and follow these skills when available:
 
 - `privacymcp` for official Privacy MCP card operations and the authorized bill-payment credential handoff.
 - `remote-browser-access` for the provider website, payment form, and noVNC handoff.
-- `shared-knowledge-library` only when the user wants an existing private billing profile retrieved from the canonical Google Drive library.
+- `shared-knowledge-library` for canonical bill and receipt storage, the payment ledger, and any existing private billing profile the user directs the workflow to retrieve.
+- `google-drive` and `google-sheets` for Drive file lifecycle operations and precise ledger reads or writes.
 
 Confirm that the corresponding tools are callable before starting an account operation. A skill does not connect an MCP server, authenticate a browser session, or grant Drive access. If a required tool is unavailable or read-only, report the exact blocker and stop before requesting credentials.
 
@@ -46,6 +47,44 @@ If the request is outside scope, stop and explain the limitation.
 - Never perform a real payment as a smoke test.
 - Never automatically retry an ambiguous card creation or payment submission.
 - Stop if the provider, domain, patient/customer account, amount, fee, currency, or payment purpose changes after approval.
+- Never store PAN, CVV, expiration, Privacy card tokens, passwords, one-time codes, session tokens, diagnoses, or unnecessary medical detail in the payment ledger.
+
+## Canonical bill records and payment ledger
+
+Use Google Drive `ChatGPT Library/Bill Payments` as the canonical owner for ordinary bill-payment records:
+
+- `Bills/<YYYY>/`: original uploaded bills and invoices.
+- `Receipts/<YYYY>/`: provider receipts and payment confirmations.
+- `Bill Payments Ledger`: the native Google Sheet, using its `Payments` tab for one durable row per logical bill.
+
+Before a non-trivial Drive write, read the live shared-library policy. Search the canonical destination and ledger before creating a file or row. Adopt an existing logical equivalent instead of creating a duplicate.
+
+When the user uploads a bill image, PDF, or other supported document:
+
+1. Use the current-turn upload immediately for inspection.
+2. Assign a stable payment ID in the form `BP-YYYYMMDD-<unique-suffix>`.
+3. Search the ledger and the applicable year folder using provider, masked account or invoice identifier, statement date, amount, filename, file identity, and available content evidence.
+4. If no equivalent exists, save the original bytes once under `Bills/<YYYY>/`, preserving the MIME type. Use a sanitized filename such as `YYYY-MM-DD_<provider>_<masked-reference>_bill.<ext>`. Do not put a patient name, diagnosis, procedure, full account number, or other unnecessary sensitive detail in the filename.
+5. Verify the saved Drive file ID, title, MIME type, URL, and parent folder.
+6. Append one `Payments` row with status `Received`, the Drive URL in `Bill File`, and the immutable Drive ID in `Bill File ID`.
+
+The ledger columns are:
+
+`Payment ID`, `Status`, `Provider`, `Bill / Account (Masked)`, `Statement Date`, `Due Date`, `Bill Amount`, `Fee`, `Total`, `Currency`, `Paid At (ET)`, `Confirmation Number`, `Payment Domain`, `Privacy Card Last 4`, `Bill File`, `Bill File ID`, `Receipt File`, `Receipt File ID`, `Source Type`, `Duplicate Check`, `Notes`, and `Updated At (ET)`.
+
+Use typed dates and numbers. Store plain Drive URLs in the file-link columns and the corresponding stable IDs in the ID columns. Mask account and card identifiers. Keep notes minimal.
+
+Update the same row as the workflow progresses. Use only these statuses: `Received`, `Needs Review`, `Awaiting Approval`, `Paid`, `Pending`, `Declined`, `Cancelled`, `Duplicate`, or `Failed`.
+
+When a provider receipt or confirmation file is available:
+
+1. Save it once under `Receipts/<YYYY>/` with a sanitized filename.
+2. Verify its Drive identity and parent.
+3. Update the existing row's `Receipt File` and `Receipt File ID`.
+
+An ordinary medical bill remains a financial record under `Bill Payments`. If the user explicitly wants the original kept under `Medical records`, move the same Drive file and keep its Drive ID in the ledger. Do not create a competing copy.
+
+If Drive storage or the ledger is unavailable before payment, stop before card creation and report the blocker. If the payment already occurred but the record update fails, do not resubmit. Report the confirmed payment outcome and the separate recordkeeping failure.
 
 ## Payment workflow
 
@@ -72,7 +111,7 @@ Before entering payment details:
 2. Prefer navigating from the provider's known official site or authenticated portal.
 3. Treat a third-party processor as acceptable only when the verified provider routes to it during the current session and the provider, amount, and account remain consistent.
 4. Check the provider portal for paid, pending, adjusted, or zero-balance status.
-5. Check available receipts and the smallest useful Privacy transaction window for a likely prior payment.
+5. Check the payment ledger, available receipts, and the smallest useful Privacy transaction window for a likely prior payment.
 6. If duplicate status is uncertain, stop and ask the user before continuing.
 
 Never infer legitimacy solely from professional formatting, urgency, a logo, a QR code, or HTTPS.
@@ -215,7 +254,7 @@ Report only masked and necessary information:
 - Masked card last four digits.
 - Any uncertainty, decline, pending state, or follow-up required.
 
-Do not automatically save the bill, receipt, billing profile, or transaction record. If the user requests durable storage, route it through the appropriate canonical library skill and save no card credentials.
+Verify that the original bill is stored, the payment row reflects the final supported status, and any available receipt is saved and linked. Do not save the billing profile or any card credentials in the bill folders or ledger.
 
 ## Failure boundaries
 
