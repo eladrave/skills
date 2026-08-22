@@ -245,3 +245,22 @@ The completed `SKILL.md` must:
 - Include ambiguous-failure reconciliation and duplicate-creation protection.
 - Avoid CLI commands, npm instructions, shell execution, and API-key handling.
 - Contain no placeholders, contradictions, or unsupported claims.
+
+## Amendment: interactive bill-payment handoff
+
+Date: 2026-08-22
+
+The original standalone PAN workflow remains the default when the user asks to view or copy card credentials. A new, narrowly scoped exception supports the separate `billpayments` orchestration skill.
+
+When `billpayments` is active, the Privacy MCP skill may retrieve PAN, CVV, and expiration and transmit them directly to the verified provider or payment-processor form in Remote Browser only when:
+
+- The user directly requested the bill payment in a private, one-to-one, interactive foreground conversation.
+- The bill, provider, masked account, provider domain, processor domain, final amount, fees, and currency were verified.
+- A limited `SINGLE_USE` card was proposed for the exact final total.
+- The user explicitly authorized card creation, credential retrieval, and transmission of the credentials and approved billing profile to the named provider for that exact bill.
+- The agent does not display, save, summarize, message, email, remember, or otherwise forward the credentials.
+- A separate, fresh final approval is obtained immediately before the charge is submitted.
+
+The exception is prohibited for scheduled, background, unattended, recurring, and smoke-test workflows. Any material change to the provider, domain, account, amount, fee, currency, or form invalidates authorization. Ambiguous creation, credential filling, or payment outcomes must be reconciled through read-only provider and Privacy evidence before any retry.
+
+This amendment supersedes the earlier no-forward rule only for the exact browser handoff above. All other credential-retrieval and non-retention rules remain unchanged.

@@ -1,8 +1,6 @@
 ---
 name: privacymcp
-description: Use when the user explicitly asks to manage or analyze a Privacy.com account through the official Privacy MCP server, including virtual cards, full card details, spend limits, card states, transactions, or bulk card operations.
-version: 1.0.0
-license: MIT-0
+description: Use when the user explicitly asks to manage or analyze a Privacy.com account through the official Privacy MCP server, including virtual cards, full card details, spend limits, card states, transactions, bulk card operations, or an interactive bill payment governed by the separate billpayments skill.
 ---
 
 # Privacy MCP
@@ -73,7 +71,7 @@ Currently documented card types include `SINGLE_USE`, `MERCHANT_LOCKED`, and `UN
 - Ask the user to choose when more than one card matches.
 - Use the smallest practical transaction date range and page size.
 - Do not store Privacy account data, card data, or transaction history in long-term memory.
-- Do not send PAN, CVV, or expiry to email, messaging, files, webhooks, browser tools, or any other service.
+- Do not send PAN, CVV, or expiry to email, messaging, files, webhooks, browser tools, or any other service, except for the narrowly scoped foreground browser handoff defined in **Authorized bill-payment credential handoff** below.
 - Do not claim an action succeeded until the resulting server-side state has been verified.
 - Never automatically retry an ambiguous financial mutation.
 
@@ -193,9 +191,9 @@ CLOSE <last-four>
 
 Words such as disable, stop, remove, or delete are ambiguous. Ask whether the user means pause or permanent closure.
 
-## Retrieve PAN, CVV, or expiry
+## Retrieve PAN, CVV, or expiry for user display
 
-Use `get_pan` only when the user directly requests full card credentials or a specific sensitive field.
+Use this workflow when the user directly requests full card credentials or a specific sensitive field for personal copying. Do not use it for an authorized bill-payment browser handoff.
 
 Required sequence:
 
@@ -216,6 +214,48 @@ This will expose sensitive payment credentials in the Privacy MCP result and thi
 10. Require a new confirmation for every later retrieval.
 
 If retrieval fails or returns malformed data, reveal no partial credential values. Report the failure and require a new confirmation before another attempt.
+
+## Authorized bill-payment credential handoff
+
+This is the only exception to the general prohibition against forwarding PAN, CVV, or expiry to a browser tool.
+
+Use this exception only when all of the following are true:
+
+- The separate `billpayments` skill is active and its complete workflow is being followed.
+- The user directly requested payment of their own bill or a bill they are authorized to pay.
+- The work is occurring in a private, one-to-one, interactive foreground conversation.
+- The workflow is not scheduled, background, unattended, recurring, or a smoke test.
+- The bill, provider, masked account, official provider domain, payment-processor domain, final total, fees, and currency have been verified.
+- A `SINGLE_USE` card with an exact transaction limit has been proposed.
+- The user gave fresh, specific authorization to create the card, retrieve its credentials, and transmit the credentials and approved billing profile only to the named provider or verified processor for the exact displayed amount.
+- Remote Browser is the authorized browser route and exposes the expected verified form.
+
+The bill-payment authorization must describe:
+
+- Provider and verified domains.
+- Masked bill or account identity.
+- Bill amount, fees, final total, and currency.
+- Proposed card type, limit, duration, state, and memo.
+- Which billing-profile fields will be transmitted.
+- That tool or chat history may retain sensitive credential-handling events.
+- That this authorization does not approve the final payment submission.
+
+After authorization:
+
+1. Check recently created cards for a likely duplicate.
+2. Create the proposed card once and verify its masked server-side state.
+3. Take a fresh browser snapshot and re-check the provider, processor domain, masked account, and total.
+4. Call `get_pan` once.
+5. Do not display, quote, summarize, notify, log, save, remember, or expose the returned credentials.
+6. Immediately enter each credential only into its corresponding field on the verified provider or processor form.
+7. Do not take or retain a screenshot that exposes unmasked credentials.
+8. Do not forward the credentials to any other tool, domain, message, file, webhook, or later workflow.
+9. If the provider, domain, account, total, currency, or form differs from the authorization, do not transmit the credentials. Stop and report the mismatch.
+10. Treat the credential handoff as complete after the approved fields are filled.
+
+Retrieving and filling credentials does not authorize the charge. The `billpayments` skill must present the final transaction summary and obtain fresh final approval immediately before clicking the control that submits payment.
+
+If card retrieval, browser filling, or submission has an ambiguous result, do not retrieve again, create another card, or resubmit automatically. Reconcile using masked card state, provider status, receipts, and the smallest useful Privacy transaction window before asking for new approval.
 
 ## Transactions
 

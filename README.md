@@ -170,6 +170,7 @@ skills/
 ├── TailScaleManagmet/                   # Tailscale Management API skill
 ├── amazon-transaction-mcp/              # Private Amazon orders/transactions MCP skill
 │   └── plugin/                           # portable Codex/ChatGPT plugin marketplace + guide
+├── billpayments/                        # Approval-gated bill payment orchestrator
 ├── creating-codex-custom-subagents/     # Codex subagent generator + validators/templates
 ├── creating-composio-mcp-servers/       # Composio MCP creation/configuration skill
 ├── litellm-agent-control-plane/         # LACP agent builder + API client
@@ -184,7 +185,7 @@ skills/
 └── docs/                                # design/supporting docs, NOT a skill
 ```
 
-There are currently **18 `SKILL.md` files** in the repository, including the skill copy bundled
+There are currently **19 `SKILL.md` files** in the repository, including the skill copy bundled
 inside the Amazon Transaction MCP plugin.
 
 ## Architecture and selection rules
@@ -225,6 +226,8 @@ name: codex-drive-as-knowledge
 
 Do not silently fall back from one to the other.
 
+`billpayments` is a separate foreground orchestration skill. It depends on the updated `privacymcp` credential-handoff exception and `remote-browser-access`; it may also use `shared-knowledge-library` for an explicitly requested billing profile. Installing `billpayments` without the coordinated `privacymcp` update leaves a material instruction conflict and must not be treated as a working payment setup.
+
 `plivo` and `plivo-whatsapp` are also different:
 
 - `plivo` uses a connected Plivo MCP for SMS, MMS, and voice.
@@ -258,6 +261,7 @@ Do not silently fall back from one to the other.
 | Skill | Repository path | Use when | Important dependencies | Safe smoke test |
 |---|---|---|---|---|
 | `amazon-transaction-mcp` | [`amazon-transaction-mcp/`](amazon-transaction-mcp/) ([plugin install guide](amazon-transaction-mcp/plugin/readme.md)) | Retrieve private Amazon orders, item prices, shipments, and payment transactions while handling expired login, MFA, bounded retries, pagination, and short MCP client timeouts. | Connected and authorized private Amazon Transaction MCP. | Call `amazon_auth_status(check_live=false)`, then make one bounded read such as `amazon_list_orders(time_filter="last7", all_pages=false, full_details=false)`. Do not expose credentials, tokens, cookies, or OTP values. |
+| `billpayments` | [`billpayments/`](billpayments/) | Review and pay an ordinary verified bill in an interactive foreground session using a limited Privacy single-use card and Remote Browser, with separate authorization for card creation/credential transmission and final payment submission. | Updated `privacymcp`, `remote-browser-access`, official Privacy MCP, callable Remote Browser tools, and optional `shared-knowledge-library` access for a billing profile. | Validate package structure and run a behavioral preview that stops before card creation, PAN retrieval, browser credential entry, or payment submission. Never make a real payment as a smoke test. |
 | `tailscale-management` | [`TailScaleManagmet/`](TailScaleManagmet/) | Inspect or manage the configured Tailscale tailnet through the Management API, including devices, routes, exit nodes, DNS, ACL/policy, users, keys, webhooks, services, and settings. | `codex-drive-as-knowledge`, Google Drive access to the pinned `TailScale.md` runbook, current Tailscale API access. | Load the authoritative runbook without exposing its credential, then perform the documented read-only API preflight or device-list call. Do not mutate Tailscale as a smoke test. |
 | `plivo` | [`plivo/`](plivo/) | Use a connected Plivo MCP to find/select a sender and operate SMS, MMS, and voice. Live MCP schemas and enums are authoritative. | Connected/authenticated Plivo MCP, persistent memory if cross-session sender reuse is desired. | Discover enabled actions and live schemas, enumerate sender-number capabilities, and stop before sending anything. |
 | `plivo-whatsapp` | [`plivowhatsapp/`](plivowhatsapp/) | Configure and use Plivo WhatsApp safely, including template synchronization/search, freeform/template sends, and delivery checks. | Python. Live sending requires Plivo credentials and the official SDK, installed only under the skill's consent workflow. | Run `python3 -m pytest plivowhatsapp/tests` when `pytest` is available, plus `python3 plivowhatsapp/scripts/plivo_whatsapp.py template inspect-text --text 'Hello {{1}}'`. No message is sent. |
@@ -351,6 +355,9 @@ graph TD
     PCM[privacymcp] --> PRMCP[Privacy MCP]
     PCLI[privacy-cli] --> PRCLI[Privacy CLI]
     RB[remote-browser-access] --> RBMCP[Remote Browser MCP]
+    BP[billpayments] --> PCM
+    BP --> RB
+    BP -. optional billing profile .-> SKL
     SF[simplefin-finance] --> SFB[SimpleFIN Bridge]
     LACP[lacp-agent-builder] --> LAPI[LACP REST API]
 ```
@@ -443,6 +450,17 @@ Choose exactly the requested interface:
 
 - `privacymcp` for the official Privacy MCP workflow.
 - `privacy-cli` for the official Privacy CLI workflow.
+
+### “Pay this bill with a Privacy virtual card”
+
+Use all of:
+
+1. `billpayments`.
+2. The coordinated updated version of `privacymcp`.
+3. `remote-browser-access`.
+4. `shared-knowledge-library` only when the user explicitly wants an existing billing profile retrieved from the canonical Drive library.
+
+Keep the workflow foreground and interactive. Stop at the first authorization boundary during testing. Never create a card, retrieve PAN/CVV, fill a live payment form, or submit a payment merely to validate installation.
 
 ### “Use Amazon or my logged-in remote Chrome”
 

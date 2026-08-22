@@ -1,0 +1,16 @@
+interface:
+  display_name: "Bill Payments"
+  short_description: "Pay verified bills with approval controls"
+  default_prompt: "Use $billpayments to review and pay this bill after my final approval."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "privacy"
+      description: "Official Privacy MCP for single-use virtual cards"
+    - type: "mcp"
+      value: "remote-browser"
+      description: "Remote Browser MCP for authenticated payment portals"
+
+policy:
+  allow_implicit_invocation: true
