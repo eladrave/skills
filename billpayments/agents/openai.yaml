@@ -11,6 +11,9 @@ dependencies:
     - type: "mcp"
       value: "remote-browser"
       description: "Remote Browser MCP for authenticated payment portals"
+    - type: "mcp"
+      value: "google-drive"
+      description: "Google Drive and Sheets for canonical bill records and the payment ledger"
 
 policy:
   allow_implicit_invocation: true
