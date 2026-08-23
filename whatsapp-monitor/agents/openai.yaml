@@ -1,0 +1,4 @@
+interface:
+  display_name: "WhatsApp Monitor"
+  short_description: "Monitor selected WhatsApp groups safely"
+  default_prompt: "Use $whatsapp-monitor to connect WhatsApp, configure group monitoring, and summarize new important messages safely."
