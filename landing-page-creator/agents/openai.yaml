@@ -1,0 +1,4 @@
+interface:
+  display_name: "Landing Page Creator"
+  short_description: "Build complete landing pages with admin tools"
+  default_prompt: "Use $landing-page-creator to build a complete landing page with forms, D1 storage, a protected admin dashboard, and configurable webhooks."
