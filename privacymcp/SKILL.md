@@ -50,7 +50,7 @@ The official server currently documents these tools. Always verify the live sche
 |---|---|---|
 | List cards | `list_cards` | None |
 | Read one masked card | `get_card` | None |
-| Create a card | `create_card` | Required |
+| Create a card | `create_card` | Required, except one constrained preparatory card under the active `billpayments` workflow |
 | Retrieve PAN, CVV, and expiry | `get_pan` | Sensitive confirmation |
 | Pause a card | `pause_card` | Required |
 | Unpause a card | `unpause_card` | Required |
@@ -94,7 +94,7 @@ Never choose a card solely from a partial or ambiguous memo.
 
 Read-only card and transaction queries may run without confirmation.
 
-Every mutation requires a fresh confirmation after showing:
+Every mutation requires a fresh confirmation after showing the following, except creation of one constrained single-use preparatory card under the active `billpayments` workflow:
 
 - The masked card identity, when applicable.
 - The current value and proposed value.
@@ -109,6 +109,8 @@ Do not treat silence, an earlier generic approval, or approval for a different a
 ## Create a card
 
 Use `create_card` or the equivalent live capability.
+
+When the separate `billpayments` skill is active, follow its authorized bill-payment exception. A direct request to pay a specific bill authorizes creation of one constrained `SINGLE_USE` card after the provider, account, duplicate status, and final total are verified. This exception does not authorize `get_pan`, credential transmission, or a charge. For all other card creation, use the confirmation sequence below.
 
 1. Collect the requested type, memo, spend limit, duration, and initial state.
 2. Validate every value against the live schema.
@@ -226,8 +228,8 @@ Use this exception only when all of the following are true:
 - The work is occurring in a private, one-to-one, interactive foreground conversation.
 - The workflow is not scheduled, background, unattended, recurring, or a smoke test.
 - The bill, provider, masked account, official provider domain, payment-processor domain, final total, fees, and currency have been verified.
-- A `SINGLE_USE` card with an exact transaction limit has been proposed.
-- The user gave fresh, specific authorization to create the card, retrieve its credentials, and transmit the credentials and approved billing profile only to the named provider or verified processor for the exact displayed amount.
+- One constrained `SINGLE_USE` card has been created for the verified final total. Its limit must be exact when supported. If Privacy enforces whole-dollar limits, only the smallest upward rounding of less than one dollar is allowed, and the provider charge must remain exact.
+- The user gave the fresh exact `PAY <final-total> TO <provider>` confirmation required by the `billpayments` skill. This authorizes retrieving the prepared card's credentials, transmitting them and the required billing-profile fields only to the named provider or verified processor, and submitting the exact displayed charge once.
 - Remote Browser is the authorized browser route and exposes the expected verified form.
 
 The bill-payment authorization must describe:
@@ -235,25 +237,23 @@ The bill-payment authorization must describe:
 - Provider and verified domains.
 - Masked bill or account identity.
 - Bill amount, fees, final total, and currency.
-- Proposed card type, limit, duration, state, and memo.
+- Prepared card's masked identity, type, actual limit, duration, state, and memo.
 - Which billing-profile fields will be transmitted.
 - That tool or chat history may retain sensitive credential-handling events.
-- That this authorization does not approve the final payment submission.
+- That the exact `PAY ...` confirmation authorizes both the credential handoff and one payment submission for the displayed transaction.
 
 After authorization:
 
-1. Check recently created cards for a likely duplicate.
-2. Create the proposed card once and verify its masked server-side state.
-3. Take a fresh browser snapshot and re-check the provider, processor domain, masked account, and total.
-4. Call `get_pan` once.
-5. Do not display, quote, summarize, notify, log, save, remember, or expose the returned credentials.
-6. Immediately enter each credential only into its corresponding field on the verified provider or processor form.
-7. Do not take or retain a screenshot that exposes unmasked credentials.
-8. Do not forward the credentials to any other tool, domain, message, file, webhook, or later workflow.
-9. If the provider, domain, account, total, currency, or form differs from the authorization, do not transmit the credentials. Stop and report the mismatch.
-10. Treat the credential handoff as complete after the approved fields are filled.
-
-Retrieving and filling credentials does not authorize the charge. The `billpayments` skill must present the final transaction summary and obtain fresh final approval immediately before clicking the control that submits payment.
+1. Verify the prepared card's masked server-side state and confirm that it matches the final preview.
+2. Take a fresh browser snapshot and re-check the provider, processor domain, masked account, total, and submit control.
+3. Call `get_pan` once.
+4. Do not display, quote, summarize, notify, log, save, remember, or expose the returned credentials.
+5. Immediately enter each credential only into its corresponding field on the verified provider or processor form.
+6. Do not take or retain a screenshot that exposes unmasked credentials.
+7. Do not forward the credentials to any other tool, domain, message, file, webhook, or later workflow.
+8. Re-check that the provider, domain, account, total, fee, currency, and submit control still match the approved preview. If anything material differs, do not submit. Stop and require a new final approval after reconciliation.
+9. Submit the approved payment exactly once as part of the same continuous foreground action.
+10. Treat the credential handoff as complete after the approved submission or after stopping because of a mismatch or error.
 
 If card retrieval, browser filling, or submission has an ambiguous result, do not retrieve again, create another card, or resubmit automatically. Reconcile using masked card state, provider status, receipts, and the smallest useful Privacy transaction window before asking for new approval.
 
