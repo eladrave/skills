@@ -1,11 +1,11 @@
 ---
 name: billpayments
-description: Use when the user asks ChatGPT or Codex to receive, store, track, review, or pay an ordinary bill or invoice, including a medical, utility, insurance, household, or service-provider bill. Combines canonical Google Drive storage, a Google Sheets payment ledger, the official Privacy MCP, Remote Browser, and a private billing profile from the shared knowledge library. Requires a user-initiated foreground session, exact merchant and amount verification, a limited single-use virtual card, explicit authorization before transmitting payment credentials, and fresh final approval immediately before submitting the transaction.
+description: Use when the user asks ChatGPT or Codex to receive, store, track, review, or pay an ordinary bill or invoice, including a medical, utility, insurance, household, or service-provider bill. Combines canonical Google Drive storage, a Google Sheets payment ledger, the official Privacy MCP, Remote Browser, and a private billing profile from the shared knowledge library. Requires a user-initiated foreground session, exact merchant and amount verification, a limited single-use virtual card, and one fresh final approval covering credential transmission and payment submission.
 ---
 
 # Bill Payments
 
-Pay a verified ordinary bill in an interactive foreground session while keeping the user in control of card creation, credential transmission, and final submission.
+Pay a verified ordinary bill in an interactive foreground session. Treat the user's direct request to pay a specific bill as authorization to perform the reversible preparation needed for that payment. Keep the user in control of the consequential actions with one exact final approval immediately before credential transmission and payment submission.
 
 ## Required skills and tools
 
@@ -47,6 +47,8 @@ If the request is outside scope, stop and explain the limitation.
 - Never perform a real payment as a smoke test.
 - Never automatically retry an ambiguous card creation or payment submission.
 - Stop if the provider, domain, patient/customer account, amount, fee, currency, or payment purpose changes after approval.
+- A direct user request to pay a specific bill authorizes account lookup, use of the canonical billing profile with the verified provider or processor, and creation of one constrained single-use Privacy card for that bill. These preparatory actions do not authorize retrieving or transmitting card credentials or submitting a charge.
+- Require one fresh exact `PAY <final-total> TO <provider>` confirmation before retrieving card credentials. That confirmation authorizes the credential handoff, transmission of the required billing-profile fields to the verified provider or processor, and one submission of the displayed charge.
 - Never store PAN, CVV, expiration, Privacy card tokens, passwords, one-time codes, session tokens, diagnoses, or unnecessary medical detail in the payment ledger.
 
 ## Canonical bill records and payment ledger
@@ -141,7 +143,7 @@ Advance safely until the page shows the complete payable total. Record separatel
 - Credits or discounts.
 - Final total and currency.
 
-Do not create the Privacy card until the final total is known. If the site reveals or changes a fee after card creation, stop and present the new total. Obtain new approval before changing the card limit or creating a replacement.
+Do not create the Privacy card until the final total is known. If the site reveals or changes a fee after card creation, stop, reconcile the new total, and update or replace the unused card before presenting the final payment preview. Do not retrieve credentials or submit payment until the user approves the updated final preview.
 
 ### 5. Obtain or collect the billing profile
 
@@ -155,75 +157,42 @@ Use the canonical private billing profile from the shared knowledge library when
 6. If the document is absent, stale, ambiguous, or conflicts with the provider form, stop and ask the user before changing or submitting the affected fields.
 7. Do not silently update the profile during a payment workflow. Update it only from a direct user instruction and verify the Drive write.
 
-Treat the name, address, phone number, and email as sensitive data. Include their transmission to the verified provider in the card-use authorization below.
+Treat the name, address, phone number, and email as sensitive data. A direct request to pay the bill authorizes using the required fields with the verified provider or processor for account lookup and payment preparation. Do not send them elsewhere or use them for another purpose.
 
-### 6. Propose the Privacy card and credential transmission
+### 6. Create and verify the Privacy card
 
 Use the official Privacy MCP only. Discover the live schemas before calling tools.
 
-Propose:
+Use:
 
 - Type: `SINGLE_USE`, or the current live equivalent that closes after the first successful use.
-- Spend limit: the exact final total.
+- Spend limit: the exact final total when Privacy supports it. If Privacy enforces whole-dollar limits, the smallest upward rounding of less than one dollar is acceptable without another approval because it changes only the card ceiling, not the provider charge. Disclose the actual ceiling in the final preview. Stop for any larger or otherwise unexpected limit difference.
 - Duration: `TRANSACTION`, when supported.
 - State: `OPEN`, when supported.
 - Memo: a minimal provider-and-date label with no diagnosis, full account number, medical detail, or other unnecessary sensitive data.
 
 Check recently created cards for a likely duplicate before creation.
 
-Show the user:
-
-- Verified provider.
-- Verified provider and processor domains.
-- Masked bill/account identifier.
-- Bill amount, fee, final total, and currency.
-- Proposed card type, limit, duration, state, and memo.
-- Billing-profile fields that will be transmitted, summarized without unnecessarily repeating the full address.
-- A warning that Privacy MCP and Remote Browser tool or chat history may retain sensitive credential-handling events.
-
-Require a fresh affirmative confirmation that explicitly authorizes all of these imminent actions:
-
-1. Create the proposed Privacy card.
-2. Retrieve its PAN, CVV, and expiration.
-3. Transmit those credentials and the approved billing profile only to the named provider or verified processor for this exact bill and amount.
-
-This confirmation authorizes only the proposed card creation and form filling. It does not authorize final payment submission.
-
-### 7. Create and verify the card
-
-After the card-use authorization:
-
-1. Call the Privacy create-card capability once.
+1. Call the Privacy create-card capability once after the final total is known and duplicate checks pass.
 2. Verify the returned card using a masked read capability.
-3. Confirm that type, limit, duration, state, and memo exactly match the proposal.
+3. Confirm that its type, limit, duration, state, and memo match the intended payment, subject only to the permitted sub-dollar limit rounding above.
 4. If creation times out or returns an uncertain result, reconcile recent cards before considering any retry.
 5. If verification fails, stop without retrieving credentials.
+6. If the payment does not proceed, pause the unused card when practical and report its masked identity and state.
 
-### 8. Fill the payment form under the Privacy exception
+Card creation is a reversible preparatory step and does not need a separate user confirmation in a user-initiated bill-payment session.
 
-Use the authorized bill-payment handoff in the updated `privacymcp` skill.
+### 7. Require one final payment approval
 
-1. Confirm the conversation remains private and one-to-one.
-2. Take a fresh browser snapshot and re-check the provider, processor domain, masked account, and total.
-3. Call `get_pan` or the equivalent capability once.
-4. Do not display or restate the returned PAN, CVV, or expiration.
-5. Immediately enter each credential only into its corresponding payment field on the verified form.
-6. Enter only the approved billing-profile fields needed by the provider.
-7. Do not take or retain a screenshot that exposes unmasked credentials.
-8. Clear transient credential variables or references when the tool environment supports it.
-9. If the browser domain, form, amount, or account differs from the authorization, do not type the credentials. Stop and report the mismatch.
-
-The credential handoff ends after the approved form is filled. It does not permit forwarding credentials to any other tool, destination, or later workflow.
-
-### 9. Require final payment approval
-
-Before clicking the final button that authorizes the charge, present a concise transaction preview:
+Before retrieving credentials or entering them into the provider form, take a fresh browser snapshot and present a concise transaction preview:
 
 - Provider and verified payment domain.
 - Masked bill/account identifier.
 - Bill amount, fee, final total, and currency.
 - Masked Privacy card identity and its exact limit.
 - The label of the button or action that will submit the charge.
+- Billing-profile fields that will be transmitted, summarized without unnecessarily repeating sensitive values.
+- A warning that Privacy MCP and Remote Browser tool or chat history may retain sensitive credential-handling events.
 
 Require the exact phrase:
 
@@ -231,20 +200,33 @@ Require the exact phrase:
 PAY <final-total> TO <provider>
 ```
 
-The phrase must match the displayed final total and provider. It expires if any transaction field changes, the page navigates unexpectedly, the conversation moves to another request, or material time passes.
+The phrase must match the displayed final total and provider. It authorizes all of the following as one continuous action for this exact transaction:
 
-Do not treat prior approval to create the card, a generic "yes," silence, a bill instruction, or an earlier payment as final approval.
+1. Retrieve the prepared card's PAN, CVV, and expiration.
+2. Transmit those credentials and the required billing-profile fields only to the named provider or verified processor.
+3. Submit the displayed charge exactly once.
 
-### 10. Submit once and reconcile
+It expires if any transaction field changes, the page navigates unexpectedly, the conversation moves to another request, or material time passes.
+
+Do not treat card creation, a generic "yes," silence, the initial bill instruction, or an earlier payment as final approval.
+
+### 8. Fill, submit once, and reconcile
 
 After valid final approval:
 
 1. Take one last fresh snapshot and verify the provider, amount, and submit control are unchanged.
-2. Click the final payment control once.
-3. Wait for a conclusive result without repeatedly clicking or refreshing.
-4. Capture the confirmation number, receipt URL, paid amount, timestamp, and provider status when available.
-5. Query the smallest useful Privacy transaction window and verify the merchant, amount, currency, result, and masked card identity.
-6. Distinguish authorization, pending, settled, declined, reversed, and unknown states according to the actual responses.
+2. Confirm the conversation remains private and one-to-one.
+3. Call `get_pan` or the equivalent capability once. Do not display or restate the returned PAN, CVV, or expiration.
+4. Immediately enter each credential only into its corresponding field on the verified form, along with only the required billing-profile fields.
+5. Do not take or retain a screenshot that exposes unmasked credentials. Clear transient credential variables or references when supported.
+6. Re-check that the provider, processor domain, masked account, amount, fee, currency, and submit control remain unchanged. If any field differs from the approved preview, do not submit. Stop and request a new final approval after reconciliation.
+7. Click the final payment control once.
+8. Wait for a conclusive result without repeatedly clicking or refreshing.
+9. Capture the confirmation number, receipt URL, paid amount, timestamp, and provider status when available.
+10. Query the smallest useful Privacy transaction window and verify the merchant, amount, currency, result, and masked card identity.
+11. Distinguish authorization, pending, settled, declined, reversed, and unknown states according to the actual responses.
+
+The credential handoff permits only this approved provider, processor, account, and payment. It does not permit forwarding credentials to another tool, destination, or later workflow.
 
 If the outcome is ambiguous, do not submit again. Reconcile the provider balance, receipt state, recent Privacy transaction, and card state. Ask for fresh approval before any retry after an inconclusive reconciliation.
 
