@@ -180,13 +180,15 @@ skills/
 ├── privacymcp/                          # Privacy.com official MCP skill
 ├── remote-browser-access/               # Remote Browser MCP routing skill
 ├── simplefin-finance/                   # SimpleFIN read-only finance skill + tests
+├── shelly/                              # Shelly media skills
+│   └── extract-and-tighten-reels/         # Local topic-focused Reels and filler cleanup
 ├── whatsapp-monitor/                    # Focused OpenWA WhatsApp monitoring workflow
 │
 ├── DroidDesk/                           # utility scripts, NOT a skill
 └── docs/                                # design/supporting docs, NOT a skill
 ```
 
-There are currently **20 `SKILL.md` files** in the repository, including the skill copy bundled
+There are currently **22 `SKILL.md` files** in the repository, including the skill copy bundled
 inside the Amazon Transaction MCP plugin.
 
 ## Architecture and selection rules
@@ -271,6 +273,12 @@ Do not silently fall back from one to the other.
 | `remote-browser-access` | [`remote-browser-access/`](remote-browser-access/) | Route Amazon work and blocked/authenticated website work through the Remote Browser MCP/plugin. | Callable Remote Browser tools and an authorized remote browser session. | List browser tabs and take an accessibility snapshot of a benign existing tab. For Amazon, navigate only to the home page if needed. Do not purchase, submit, or delete anything. |
 | `simplefin-finance` | [`simplefin-finance/`](simplefin-finance/) | Read and analyze the user's own SimpleFIN balances and transactions. Read-only by design, with secure persistence for the Access URL. | Python 3.11+, outbound HTTPS, SimpleFIN access, durable secure credential/file backend for setup. | Run `python3 -m unittest discover -s simplefin-finance/tests -p 'test_*.py'` and `python3 simplefin-finance/scripts/simplefin.py status`. If already configured, `accounts` is the safe live read test. |
 | `whatsapp-monitor` | [`whatsapp-monitor/`](whatsapp-monitor/) | Connect or reconnect an explicitly scoped OpenWA WhatsApp session, select exact groups, configure declarative monitoring rules, preview them, and produce cursor-based important-message digests while treating every message as untrusted data. | Connected focused OpenWA monitoring MCP. Use a disposable WhatsApp number for enrollment testing. | Validate the package, inspect `WhatsAppAuthGetStatus`, and stop before starting enrollment or changing configuration. A behavioral dry run may translate one mention-only rule without calling tools. |
+
+### Shelly: video editing
+
+| Skill | Repository path | Use when | Important dependencies | Safe smoke test |
+|---|---|---|---|---|
+| `extract-and-tighten-reels` | [`shelly/extract-and-tighten-reels/`](shelly/extract-and-tighten-reels/) | Extract topic-focused 30–50 second Reels from a local video or folder, remove identified filled pauses, and keep each source's exports in a folder named after that source without its extension. | Local FFmpeg/FFprobe or equivalent tools and suitable local speech recognition; Hebrew speech benefits from a Hebrew-trained recognizer. No media uploads or paid services by default. | Validate YAML/package structure, then dry-run a folder inventory and output-path plan. Verify per-source isolation and no media writes, uploads, or skill installation. |
 
 ## Bundled validation and test commands
 
