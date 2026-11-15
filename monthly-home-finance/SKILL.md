@@ -19,28 +19,35 @@ Create a transaction-level report with merchant details, Amazon items, explicit 
 ## Retrieve the bank records
 
 1. Discover the available connectors. Call `simplefin_status`, then inspect the account inventory and uniquely resolve the authorized accounts. If an account is missing or ambiguous, report the issue before retrieving a different account.
-2. Retrieve bounded transaction ranges with pending transactions excluded. Include a boundary buffer and locally filter `posted_at`: the connector's date query can include records posted outside the requested month. Prefer short requests; split surrounding windows when necessary.
-3. Check source errors, missing-data indicators and synchronization freshness, particularly when running on the 2nd. Do not present incomplete history as a complete report. Explain the specific gap and preserve useful progress.
+2. Retrieve bounded transaction ranges with pending transactions excluded. The connector's date query selects on transaction date, not posting date, and returns records posted outside the requested range; card charges have posted up to five days after their transaction date. Start each account at least **7 days before the month**, end on the first day of the next month, and locally filter `posted_at` in America/New_York. Long ranges time out: request one account per call in windows of about two weeks, overlap the windows and de-duplicate by transaction ID.
+3. Check source errors, missing-data indicators and synchronization freshness, particularly when running on the 2nd. Compare each account's balance date: the authorized accounts can sit on separate bank connections that synchronize independently, and 6535 has lagged the others. Do not present incomplete history as a complete report. Explain the specific gap and preserve useful progress.
 4. Preserve source account, transaction ID, original descriptor, signed amount, posting date and transaction date. SimpleFIN amounts use positive credits and negative debits. Display credits and debits as positive amounts in separate columns; net outflow is debit minus credit. Use integer cents or decimal arithmetic for matching and reconciliation.
 
 ## Identify Privacy merchants
 
 - For each Privacy bank debit or credit, retrieve supporting Privacy records. For debits, start with **settled**, exact-amount records created on the bank date or within the preceding **7 calendar days**, using Eastern dates.
-- Match records one-to-one across the report. Check prior-month selected evidence near the boundary so one Privacy record is not reused. Treat amount/date matches as candidates when the funding-account identity is unavailable.
+- Match records one-to-one across the report. Retrieve Privacy records from **14 days before the month**, and include the prior month's Privacy bank debits from its last 7 days in the same matching, so those debits consume their own records before the reporting month's debits are matched and one Privacy record is not reused. Treat amount/date matches as candidates when the funding-account identity is unavailable.
 - If prior-month selection history cannot be checked, disclose that cross-month evidence reuse remains unverified.
 - Preserve candidate merchants, source IDs, dates and matching notes. Do not pick a merchant merely because its date is closest when multiple feasible assignments remain.
 - If several candidate records identify the same merchant, distinguish a known merchant from unresolved record assignment. If two bank debits share one eligible Privacy record, flag the evidence shortfall instead of assigning it twice.
 - Handle refunds and reversals according to their source type and sign. A broader date window needs supporting evidence and an explanation.
+- The Privacy account also funds charges from accounts outside this report, so Privacy records with no matching bank debit are expected and are not exceptions.
+- Use the same match statuses every month: exact amount/date candidate; merchant identified, record mapping unresolved; ambiguous exact-amount candidates (different merchants, or more debits than eligible records). Count the last two as assignments needing review.
 
 ## Itemize Amazon activity
 
 - Resolve Amazon charges and refunds on each included card against **actual payment records**, checking exact amount, charge/refund direction, the source card ending (normally **1335 or 6535**), and date proximity. Order dates alone do not establish the bank match. Record the matching date window; if multiple feasible payments remain, require additional reference evidence or flag the assignment. Do not resolve a tie by date proximity alone.
-- Use bounded order-history pages and individual order-detail calls. Keep list-level `all_pages` and `full_details` false where those options exist. Follow returned pagination markers. Search earlier orders when shipping or payment is delayed.
-- If general payment history fails, try per-order payment lookups. If authentication or another technical issue blocks progress, notify the user and identify the affected records.
+- Use bounded order-history pages and individual order-detail calls. Keep list-level `all_pages` and `full_details` false where those options exist. Follow returned pagination markers.
+- Page order history back to at least **45 days before the month starts**. An order is charged when it ships, which has been 16 days after it was placed, so the order behind a charge can predate the month by weeks. While any Amazon bank charge is still unmatched, keep paging earlier, up to 90 days before the month, before flagging it.
+- Orders paid by gift card show a zero order total and no card payment; they explain no bank charge.
+- If general payment history fails, use per-order payment lookups with payment details enabled for every candidate order. Order-detail payment fields can be empty even when requested, so the per-order payment lookup is the evidence for amount, date and card ending. If authentication or another technical issue blocks progress, notify the user and identify the affected records.
 - Replace a verified purchase's bank row with separate item rows. Account for quantities, discounts, tax, shipping and split payments. Allocate shared adjustments with exact-cent rounding and label estimates. Never assign the whole order to every shipment or every payment card.
 - Do not reuse one payment to match multiple bank charges unless source evidence documents the split and the allocations reconcile.
+- Keep item titles verbatim from the order source.
+- When source quantities are omitted, leave the source quantity blank and record the quantity used separately.
 - When source quantities are omitted, use one unit per source line only if that interpretation reconciles the complete order subtotal; disclose the inference. Keep unexplained residuals explicitly labeled rather than presenting them as verified item costs.
 - For indistinguishable equal-value charges, preserve the unresolved bank rows and show candidate item details separately as **non-additive evidence**, with blank allocated bank amounts. Do not count those details again.
+- Count as Amazon rows needing item review only the bank charges with no matched order or an ambiguous assignment. List services without item details separately, so the count means the same thing every month.
 - Identify services without retail item details and unmatched refunds explicitly. A Whole Foods store descriptor alone is not evidence of an online Amazon order or its items.
 - When a refund matches a payment and order but the refunded item is unknown, retain the bank refund amount and flag item identification as unresolved. Do not allocate the refund across the original items without supporting evidence.
 
@@ -56,7 +63,7 @@ Follow the available Google Sheets and spreadsheet authoring skills. Produce a n
 | Privacy matches | Bank reference, source account, candidate/selected evidence, merchant, dates and uncertainty. |
 | Amazon detail | Source account, bank/payment/order references, items, allocation components and method, plus clearly separated evidence-only rows. |
 
-Keep dates and amounts typed, use filters and frozen headers for detail, and preserve traceable source IDs. Create formulas for summary and reconciliation calculations. For regeneration, refresh formulas, filters and exception formatting through the final populated row.
+Keep dates and amounts typed, use filters and frozen headers for detail, and preserve traceable source IDs. Set the spreadsheet time zone to America/New_York. Create formulas for summary and reconciliation calculations. For regeneration, refresh formulas, filters and exception formatting through the final populated row.
 
 Apply these accounting rules:
 
@@ -73,6 +80,7 @@ Before reporting completion, verify:
 2. For each bank transaction, allocated credits minus allocated debits equal its original signed amount to the cent. Evidence-only rows contribute nothing to totals.
 3. Debits and credits reconcile separately, both by account and combined. Purchases exclude repayments and transfers. Count exceptions by affected source bank transaction, not by candidate records or expanded item rows. Report row counts separately from source transaction counts.
 4. Every expense row has the correct source account. Privacy evidence is not reused; Amazon matches use the correct card. No unsupported assignment is labeled verified.
-5. The saved Google Sheet has the correct title, tabs, folder, formulas and values. Read it back, check formula errors and inspect the rendered layout. A successful write alone is not completion.
+5. The saved Google Sheet has the correct title, tabs, folder, time zone, formulas and values. Read it back, check formula errors and inspect the rendered layout. A successful write alone is not completion.
+6. When another report for the same month exists, such as the report being regenerated or one written as a separate test copy, compare every Summary line, the row counts and each unresolved item against it. Investigate each difference in the sources and report which version is right. Matching totals do not prove matching detail: equal review counts have hidden different unresolved rows.
 
 Return the verified sheet link, transaction/report row counts, reconciliation result and material unresolved matches or technical limitations. Do not claim the file is private without checking its actual sharing.
